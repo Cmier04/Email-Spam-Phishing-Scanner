@@ -1,29 +1,42 @@
 
 import { useState } from "react";
+import {
+  Inbox,
+  CircleCheck,
+  TriangleAlert,
+  ShieldCheck,
+} from "lucide-react";
+
 import Sidebar from "./components/Sidebar";
 import Header from "./components/Header";
+import MetricCard from "./components/MetricCard";
+import EmailResultsTable from "./components/EmailResultsTable";
+import { mockEmails } from "./data/mockEmails";
 
 function App() {
-  // Controls whether the sidebar is visible on mobile.
+  // Controls the visibility of the mobile sidebar.
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   return (
     <div className="min-h-screen bg-[#f6f8fb] text-[#17213c]">
+      {/* Sidebar navigation */}
       <Sidebar
         isOpen={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
       />
 
+      {/* Main dashboard layout */}
       <main className="lg:ml-[248px]">
         <Header
           onOpenMenu={() => setSidebarOpen(true)}
         />
 
         <div className="mx-auto max-w-[1280px] px-5 py-7 md:px-8 md:py-9">
+
           {/* Dashboard welcome section */}
           <div className="mb-7 flex flex-wrap items-end justify-between gap-4">
             <div>
-              <h2 className="text-[26px] font-bold tracking-[-0.035em] text-[#17213c]">
+              <h2 className="text-[26px] font-bold tracking-tight text-[#17213c]">
                 Good Afternoon John Doe,
               </h2>
 
@@ -38,20 +51,47 @@ function App() {
             </div>
           </div>
 
-          {/* Dashboard placeholder for Phase 3 */}
-          <section className="rounded-2xl border border-[#e2e6ed] bg-white p-6 shadow-sm">
-            <h3 className="text-base font-bold text-[#202a44]">
-              Dashboard overview
-            </h3>
+          {/* Dashboard statistics use temporary values for now. */}
+          <section
+            aria-label="Email statistics"
+            className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4"
+          >
+            <MetricCard
+              label="Emails scanned"
+              value="1,284"
+              note="+48 this week"
+              icon={Inbox}
+              color="blue"
+            />
 
-            <p className="mt-2 text-sm text-[#747e93]">
-              The email statistics and recent scan results.
-            </p>
+            <MetricCard
+              label="Legitimate"
+              value="1,247"
+              note="97.1% of emails"
+              icon={CircleCheck}
+              color="green"
+            />
 
-            <span className="mt-5 inline-block rounded-lg bg-[#eef2ff] px-3 py-1.5 text-xs font-semibold text-[#3157d5]">
-              Module
-            </span>
+            <MetricCard
+              label="Potential threats"
+              value="37"
+              note="12 need review"
+              icon={TriangleAlert}
+              color="red"
+            />
+
+            <MetricCard
+              label="Protection score"
+              value="96%"
+              note="Excellent"
+              icon={ShieldCheck}
+              color="violet"
+            />
           </section>
+
+          {/* Display sample emails with search and filters. */}
+          <EmailResultsTable emails={mockEmails} />
+
         </div>
       </main>
     </div>
