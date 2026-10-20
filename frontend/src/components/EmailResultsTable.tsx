@@ -7,6 +7,7 @@ type EmailFilter = "All emails" | Email["classification"];
 
 type EmailResultsTableProps = {
   emails: Email[];
+  onSelect: (email: Email) => void;
 };
 
 const filters: EmailFilter[] = [
@@ -29,7 +30,7 @@ const riskStyles: Record<Email["risk"], string> = {
   High: "bg-[#ffebe7] text-[#b8493b]",
 };
 
-function EmailResultsTable({ emails }: EmailResultsTableProps) {
+function EmailResultsTable({ emails, onSelect }: EmailResultsTableProps) {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<EmailFilter>("All emails");
 
@@ -120,6 +121,7 @@ function EmailResultsTable({ emails }: EmailResultsTableProps) {
               <th className="px-4 py-3">Classification</th>
               <th className="px-4 py-3">Confidence</th>
               <th className="px-4 py-3">Risk</th>
+              <th className="px-4 py-3">Details</th>
             </tr>
           </thead>
 
@@ -131,6 +133,7 @@ function EmailResultsTable({ emails }: EmailResultsTableProps) {
               return (
                 <tr
                   key={email.id}
+                  onClick={() => onSelect(email)}
                   className="border-b border-[#eef0f4] last:border-0"
                 >
                   <td className="px-6 py-4">
@@ -201,6 +204,21 @@ function EmailResultsTable({ emails }: EmailResultsTableProps) {
                       {email.risk}
                     </span>
                   </td>
+
+                  <td className="px-4 py-4">
+                    <button
+                      type="button"
+                      aria-label={`View analysis for ${email.subject}`}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onSelect(email);
+                      }}
+                      className="rounded-md p-1 text-[#abb1be] hover:bg-[#eef2ff] hover:text-[#3157d5] focus-visible:outline-2 focus-visible:outline-[#3157d5]"
+                    >
+                      <ChevronRight size={17} />
+                    </button>
+                  </td>
+                          
                 </tr>
               );
             })}
