@@ -11,6 +11,12 @@ export type Email = {
   classification: "Legitimate" | "Potential threat";
   confidence: number;
   risk: "Low" | "Medium" | "High";
+  greeting?: string;
+  body?: string;
+  request?: string;
+  actionLabel?: string;
+  attachment?: string;
+  signature?: string;
 };
 
 // Example records used while the backend is still under development.
@@ -40,6 +46,12 @@ export const mockEmails: Email[] = [
     classification: "Potential threat",
     confidence: 94,
     risk: "High",
+    greeting: "Hello,",
+    body: "We detected unusual activity associated with your account. Your access may be restricted if this issue is not reviewed.",
+    request: "Review your account using the official service rather than following an unexpected email link.",
+    actionLabel: "Verify account now",
+    attachment: "Account_Notice.pdf",
+    signature: "Account Protection Team",
   },
   {
     id: 3,
