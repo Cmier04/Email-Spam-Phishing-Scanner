@@ -1,0 +1,22 @@
+
+/* Import the main font and Tailwind CSS utilities. */
+@import url("https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap");
+@import "tailwindcss";
+
+/* Define the default font, text color, and background. */
+:root {
+  font-family: "DM Sans", sans-serif;
+  color: #17213c;
+  background: #f6f8fb;
+}
+
+/* Remove default browser spacing and set the minimum page size. */
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+button {
+  cursor: pointer;
+}
