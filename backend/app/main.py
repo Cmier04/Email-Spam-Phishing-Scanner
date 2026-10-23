@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.classify import router as classify_router
+from app.api.gmail import router as gmail_router
 
 
 app = FastAPI(
@@ -37,5 +38,10 @@ def health_check():
 
 app.include_router(
     classify_router,
+    prefix="/api",
+)
+
+app.include_router(
+    gmail_router,
     prefix="/api",
 )

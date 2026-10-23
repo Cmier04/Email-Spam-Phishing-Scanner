@@ -1,4 +1,8 @@
 .DS_Store
+backend/credentials.json
+backend/token.json
+backend/.env
 backend/venv/
 __pycache__/
 *.pyc
+AGENTS.md
