@@ -14,3 +14,14 @@ class EmailClassificationRequest(BaseModel):
 class EmailClassificationResponse(BaseModel):
     classification: str
     confidence: float
+
+
+class GmailMessageResponse(EmailClassificationResponse):
+    id: str
+    thread_id: str
+    sender: str
+    recipient: str
+    subject: str
+    date: str
+    snippet: str
+    body: str
