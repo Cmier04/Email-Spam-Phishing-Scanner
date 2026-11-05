@@ -2,3 +2,12 @@
 backend/venv/
 __pycache__/
 *.pyc
+*.py[cod]
+
+# Node dependencies (large files)
+node_modules/
+**/node_modules/
+frontend/node_modules/
+dist/
+build/
+release/
