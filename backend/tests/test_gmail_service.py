@@ -3,11 +3,14 @@ import unittest
 from unittest.mock import patch
 
 from app.services.gmail_service import (
+    GmailAPIError,
+    GmailMessageNotFoundError,
     NoGmailMessagesError,
     decode_body,
     extract_body,
     get_header,
     get_latest_message,
+    get_message_by_id,
     get_recent_messages,
     parse_message,
     scan_message,
@@ -181,6 +184,40 @@ class GmailMessageParsingTests(unittest.TestCase):
 
 
 class GmailServiceTests(unittest.TestCase):
+    def test_get_message_by_id_fetches_directly_without_listing_inbox(self):
+        gmail = FakeGmailService([], {"message-7": {"id": "message-7"}})
+
+        message = get_message_by_id("message-7", service=gmail)
+
+        self.assertEqual(message, {"id": "message-7"})
+        self.assertIsNone(gmail.message_resource.list_arguments)
+        self.assertEqual(
+            gmail.message_resource.get_arguments,
+            [{"userId": "me", "id": "message-7", "format": "full"}],
+        )
+
+    def test_get_message_by_id_maps_gmail_404_to_not_found(self):
+        class MissingRequest:
+            def execute(self):
+                error = RuntimeError("missing")
+                error.resp = type("Response", (), {"status": 404})()
+                raise error
+
+        gmail = FakeGmailService([], {})
+        gmail.message_resource.get = lambda **_kwargs: MissingRequest()
+
+        with self.assertRaises(GmailMessageNotFoundError):
+            get_message_by_id("missing", service=gmail)
+
+    def test_get_message_by_id_rejects_malformed_or_unexpected_resources(self):
+        malformed = FakeGmailService([], {"message-7": None})
+        unexpected = FakeGmailService([], {"message-7": {"id": "other"}})
+
+        with self.assertRaisesRegex(GmailAPIError, "malformed"):
+            get_message_by_id("message-7", service=malformed)
+        with self.assertRaisesRegex(GmailAPIError, "unexpected"):
+            get_message_by_id("message-7", service=unexpected)
+
     def test_recent_messages_uses_bounded_inbox_query_and_fetches_full_messages(self):
         gmail = FakeGmailService(
             [{"id": "new"}, {"id": "older"}],

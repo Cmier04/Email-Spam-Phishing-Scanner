@@ -44,6 +44,10 @@ class NoGmailMessagesError(GmailServiceError):
     """Raised when the authenticated account's inbox has no messages."""
 
 
+class GmailMessageNotFoundError(GmailServiceError):
+    """Raised when Gmail has no message with the requested ID."""
+
+
 class _HTMLTextExtractor(HTMLParser):
     """Extract visible text for messages that only contain an HTML body."""
 
@@ -168,6 +172,35 @@ def get_latest_message(service: Any | None = None) -> dict:
     if not messages:
         raise NoGmailMessagesError("The Gmail inbox contains no messages.")
     return messages[0]
+
+
+def get_message_by_id(message_id: str, service: Any | None = None) -> dict:
+    """Retrieve one full Gmail message directly by its opaque message ID."""
+    if not message_id or not message_id.strip():
+        raise ValueError("message_id cannot be empty.")
+
+    gmail = service or get_gmail_service()
+    try:
+        message = (
+            gmail.users()
+            .messages()
+            .get(userId="me", id=message_id, format="full")
+            .execute()
+        )
+        if not isinstance(message, dict) or not message.get("id"):
+            raise GmailAPIError("Gmail returned a malformed message resource.")
+        if str(message["id"]) != message_id:
+            raise GmailAPIError("Gmail returned an unexpected message resource.")
+        return message
+    except GmailServiceError:
+        raise
+    except Exception as exc:
+        status = getattr(getattr(exc, "resp", None), "status", None)
+        if status == 404:
+            raise GmailMessageNotFoundError(
+                f"Gmail message '{message_id}' was not found."
+            ) from exc
+        raise GmailAPIError("Unable to retrieve the Gmail message.") from exc
 
 
 def get_header(headers: list[dict] | None, name: str) -> str:
