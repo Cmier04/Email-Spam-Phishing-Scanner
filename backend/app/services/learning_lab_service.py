@@ -14,6 +14,10 @@ from app.models.schemas import (
     WhatIfTransformationRequest,
 )
 from app.services.classifier_service import classify_email_detailed
+from app.services.demo_email_service import (
+    get_demo_experiment_email,
+    is_demo_email_id,
+)
 from app.services.gmail_service import get_message_by_id, parse_message
 
 
@@ -25,28 +29,45 @@ class LearningLabValidationError(ValueError):
 class TransformationDefinition:
     part: str
     affects_classifier: bool
-    apply: Callable[[dict], tuple[bool, str]]
+    apply: Callable[[dict], "TransformationApplication"]
 
 
-def _subject_format(email: dict) -> tuple[bool, str]:
+@dataclass(frozen=True)
+class TransformationApplication:
+    applied: bool
+    message: str
+    modified_value: str | None = None
+
+
+def _subject_format(email: dict) -> TransformationApplication:
     email["subject"] = email["subject"].lower()
-    return True, "Subject capitalization was normalized."
+    return TransformationApplication(
+        True, "Subject capitalization was normalized.", email["subject"]
+    )
 
 
-def _subject_wording(email: dict) -> tuple[bool, str]:
+def _subject_wording(email: dict) -> TransformationApplication:
     email["subject"] = "A note about your account"
-    return True, "Subject wording was replaced with the predefined neutral text."
+    return TransformationApplication(
+        True,
+        "Subject wording was replaced with the predefined neutral text.",
+        email["subject"],
+    )
 
 
-def _body_rephrase(email: dict) -> tuple[bool, str]:
+def _body_rephrase(email: dict) -> TransformationApplication:
     email["body"] = (
         "We noticed a recent change associated with your account. "
         "Review your account through the service you normally use."
     )
-    return True, "The complete message body was replaced with predefined text."
+    return TransformationApplication(
+        True,
+        "The complete message body was replaced with predefined text.",
+        email["body"],
+    )
 
 
-def _replace_greeting(email: dict) -> tuple[bool, str]:
+def _replace_greeting(email: dict) -> TransformationApplication:
     body = email["body"]
     match = re.match(
         r"^(\s*)(dear|hello|hi|good morning|good afternoon|good evening)"
@@ -55,15 +76,17 @@ def _replace_greeting(email: dict) -> tuple[bool, str]:
         flags=re.IGNORECASE,
     )
     if not match:
-        return (
+        return TransformationApplication(
             False,
             "No clearly identifiable greeting was found at the start of the body.",
         )
     email["body"] = f"{match.group(1)}Hello," + body[match.end():]
-    return True, "The greeting at the start of the body was replaced."
+    return TransformationApplication(
+        True, "The greeting at the start of the body was replaced.", "Hello,"
+    )
 
 
-def _replace_request(email: dict) -> tuple[bool, str]:
+def _replace_request(email: dict) -> TransformationApplication:
     body = email["body"]
     sentences = list(re.finditer(r"[^.!?\r\n]+(?:[.!?]+|$)", body))
     action_pattern = re.compile(
@@ -76,7 +99,7 @@ def _replace_request(email: dict) -> tuple[bool, str]:
         if action_pattern.search(sentence.group())
     ]
     if len(matches) != 1:
-        return (
+        return TransformationApplication(
             False,
             "A single unambiguous requested-action sentence could not be identified.",
         )
@@ -88,29 +111,41 @@ def _replace_request(email: dict) -> tuple[bool, str]:
     email["body"] = (
         body[:sentence.start()] + replacement.lstrip() + body[sentence.end():]
     )
-    return True, "One clearly identifiable requested-action sentence was replaced."
+    return TransformationApplication(
+        True,
+        "One clearly identifiable requested-action sentence was replaced.",
+        replacement.strip(),
+    )
 
 
-def _sender_label(email: dict) -> tuple[bool, str]:
+def _sender_label(email: dict) -> TransformationApplication:
     _, address = parseaddr(email.get("sender", ""))
     email["sender"] = (
         f"Example Account Services <{address}>"
         if address
         else "Example Account Services"
     )
-    return True, "The sender display label was changed only on the isolated copy."
+    return TransformationApplication(
+        True,
+        "The sender display label was changed only on the isolated copy.",
+        "Example Account Services",
+    )
 
 
-def _sender_domain(email: dict) -> tuple[bool, str]:
+def _sender_domain(email: dict) -> TransformationApplication:
     name, _ = parseaddr(email.get("sender", ""))
     address = "notice@account-services.example"
     email["sender"] = f"{name} <{address}>" if name else address
-    return True, "The sender address was changed to a reserved example domain."
+    return TransformationApplication(
+        True,
+        "The sender address was changed to a reserved example domain.",
+        address,
+    )
 
 
-def _unavailable(component: str) -> Callable[[dict], tuple[bool, str]]:
-    def apply(_email: dict) -> tuple[bool, str]:
-        return (
+def _unavailable(component: str) -> Callable[[dict], TransformationApplication]:
+    def apply(_email: dict) -> TransformationApplication:
+        return TransformationApplication(
             False,
             f"{component} is not exposed as a separate field by the Gmail parser, "
             "so unrelated body text was left unchanged.",
@@ -119,9 +154,11 @@ def _unavailable(component: str) -> Callable[[dict], tuple[bool, str]]:
     return apply
 
 
-def _layout(description: str) -> Callable[[dict], tuple[bool, str]]:
-    def apply(_email: dict) -> tuple[bool, str]:
-        return True, description
+def _layout(
+    description: str, value: str
+) -> Callable[[dict], TransformationApplication]:
+    def apply(_email: dict) -> TransformationApplication:
+        return TransformationApplication(True, description, value)
 
     return apply
 
@@ -147,12 +184,12 @@ TRANSFORMATIONS: dict[str, TransformationDefinition] = {
     "layout-spacing": TransformationDefinition(
         "formatting",
         False,
-        _layout("Spacious layout was recorded for the frontend preview."),
+        _layout("Spacious layout was recorded for the frontend preview.", "spacious"),
     ),
     "layout-compact": TransformationDefinition(
         "formatting",
         False,
-        _layout("Compact layout was recorded for the frontend preview."),
+        _layout("Compact layout was recorded for the frontend preview.", "compact"),
     ),
 }
 
@@ -202,35 +239,50 @@ def run_what_if_experiment(
 ) -> WhatIfResponse:
     """Retrieve an email, transform a deep copy, and compare real inference."""
     ordered = _validate_and_order(transformations)
-    original = parse_message(get_message_by_id(email_id))
+    if is_demo_email_id(email_id):
+        source = "demo"
+        original = get_demo_experiment_email(email_id)
+    else:
+        source = "gmail"
+        original = parse_message(get_message_by_id(email_id))
     modified = deepcopy(original)
     original_result = classify_email_detailed(original["subject"], original["body"])
 
     results: list[AppliedTransformation] = []
+    modified_values: dict[str, str] = {}
     warnings: list[str] = []
     for transformation_id, definition in ordered:
-        applied, message = definition.apply(modified)
-        affects_classifier = definition.affects_classifier and applied
+        application = definition.apply(modified)
+        affects_classifier = definition.affects_classifier and application.applied
         results.append(
             AppliedTransformation(
                 part=definition.part,
                 transformation_id=transformation_id,
-                applied=applied,
+                applied=application.applied,
                 affects_classifier=affects_classifier,
-                message=message,
+                message=application.message,
             )
         )
-        if not applied:
-            warnings.append(message)
+        if application.applied and application.modified_value is not None:
+            modified_values[definition.part] = application.modified_value
+            if definition.part == "body":
+                # The Gmail parser exposes one flattened body. A whole-body
+                # replacement removes semantic slices shown separately by the UI.
+                modified_values.update(
+                    {"greeting": "", "request": "", "signature": ""}
+                )
+        if not application.applied:
+            warnings.append(application.message)
         elif not definition.affects_classifier:
             warnings.append(
-                f"{message} This transformation does not change the subject/body "
+                f"{application.message} This transformation does not change the subject/body "
                 "input used by the current classifier."
             )
 
     modified_result = classify_email_detailed(modified["subject"], modified["body"])
     return WhatIfResponse(
         email_id=email_id,
+        source=source,
         original_classification=original_result["classification"],
         original_confidence=original_result["confidence"],
         original_malicious_probability=original_result["malicious_probability"],
@@ -248,5 +300,6 @@ def run_what_if_experiment(
         applied_transformations=results,
         modified_subject=modified["subject"],
         modified_body=modified["body"],
+        modified_values=modified_values,
         warnings=warnings,
     )

@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import {
   ArrowLeft,
   FlaskConical,
@@ -8,14 +8,16 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import type { Email } from "../data/mockEmails";
+import { runWhatIf, type WhatIfResponse } from "../api";
 import {
+  buildWhatIfRequest,
   getLabOptions,
   getOriginalPartValue,
+  toApiPart,
   type EmailPart,
   type LabChange,
 } from "../data/labTransformations";
 import WhatIfPanel from "./WhatIfPanel";
-import { calculateDemoComparison } from "../data/demoScoring";
 
 type LearningLabProps = {
   email: Email;
@@ -80,10 +82,14 @@ function SelectableField({ label, selected, modified, onClick, children }: {
 }
 
 function LearningLab({ email, onBack, onOpenMenu }: LearningLabProps) {
-  const [selectedPart, setSelectedPart] = useState<EmailPart>("senderName");
+  const [selectedPart, setSelectedPart] = useState<EmailPart>("subject");
 
   // Stores only changed fields; the email prop remains untouched.
   const [changes, setChanges] = useState<Partial<Record<EmailPart, LabChange>>>({});
+  const [experiment, setExperiment] = useState<WhatIfResponse | null>(null);
+  const [experimentLoading, setExperimentLoading] = useState(false);
+  const [experimentError, setExperimentError] = useState<string | null>(null);
+  const requestSequence = useRef(0);
   const appliedChanges = parts
     .map((part) => changes[part])
     .filter((change): change is LabChange => change !== undefined);
@@ -91,15 +97,13 @@ function LearningLab({ email, onBack, onOpenMenu }: LearningLabProps) {
     part === "formatting" || getOriginalPartValue(email, part).trim().length > 0
   );
 
-  // Mocked data. Displayed suspicion scores are simulated, not model predictions.
-  // No classifier runs here; the backend integrator will replace this calculation.
-  const demoComparison = calculateDemoComparison(email, appliedChanges);
   const selectedContent = learningContent[selectedPart];
   const originalSelectedValue = getOriginalPartValue(email, selectedPart);
-  const spacing = changes.formatting?.value ?? "normal";
+  const modifiedSelectedValue = experiment?.modified_values[toApiPart(selectedPart)]
+    ?? originalSelectedValue;
+  const spacing = experiment?.modified_values.formatting ?? "normal";
 
-  // Summarize the selected edits for learning only. These categories and
-  // simulated score changes are not verified security findings.
+  // Summarize the backend-confirmed edits for the educational recap.
   const changedPartNames = appliedChanges.map((change) => partLabels[change.part]);
   const changedMessageText = appliedChanges.some((change) => change.scope === "Message text");
   const changedMetadata = appliedChanges.some((change) => change.scope === "Metadata only");
@@ -116,21 +120,64 @@ function LearningLab({ email, onBack, onOpenMenu }: LearningLabProps) {
       : []),
   ];
 
+  async function submitChanges(
+    nextChanges: Partial<Record<EmailPart, LabChange>>,
+    requestedChange?: LabChange,
+  ) {
+    const requestId = ++requestSequence.current;
+    const nextApplied = parts
+      .map((part) => nextChanges[part])
+      .filter((change): change is LabChange => change !== undefined);
+    if (nextApplied.length === 0) {
+      setChanges({});
+      setExperiment(null);
+      setExperimentError(null);
+      setExperimentLoading(false);
+      return;
+    }
+
+    setExperimentLoading(true);
+    setExperimentError(null);
+    try {
+      const result = await runWhatIf(buildWhatIfRequest(email.id, nextApplied));
+      if (requestId !== requestSequence.current) return;
+      const requestedResult = requestedChange
+        ? result.applied_transformations.find(
+            (item) => item.transformation_id === requestedChange.id,
+          )
+        : undefined;
+      setExperiment(result);
+      if (requestedResult && !requestedResult.applied) {
+        setExperimentError(requestedResult.message);
+        return;
+      }
+      setChanges(nextChanges);
+    } catch (error) {
+      if (requestId !== requestSequence.current) return;
+      setExperimentError(
+        error instanceof Error ? error.message : "The experiment could not be run.",
+      );
+    } finally {
+      if (requestId === requestSequence.current) setExperimentLoading(false);
+    }
+  }
+
   function applyChange(change: LabChange) {
-    // Replacing a change for the same field avoids accidental stacking.
-    setChanges((previous) => ({ ...previous, [change.part]: change }));
+    void submitChanges({ ...changes, [change.part]: change }, change);
   }
 
   function undoChange(part: EmailPart) {
-    setChanges((previous) => {
-      const updated = { ...previous };
-      delete updated[part];
-      return updated;
-    });
+    const updated = { ...changes };
+    delete updated[part];
+    void submitChanges(updated);
   }
 
   function restoreAll() {
+    requestSequence.current += 1;
     setChanges({});
+    setExperiment(null);
+    setExperimentError(null);
+    setExperimentLoading(false);
   }
 
   return (
@@ -190,7 +237,8 @@ function LearningLab({ email, onBack, onOpenMenu }: LearningLabProps) {
                 >
                   {part === "formatting"
                     ? `Current layout: ${spacing}`
-                    : changes[part]?.value ?? getOriginalPartValue(email, part)}
+                    : experiment?.modified_values[toApiPart(part)]
+                      ?? getOriginalPartValue(email, part)}
                 </SelectableField>
               ))}
             </div>
@@ -210,11 +258,14 @@ function LearningLab({ email, onBack, onOpenMenu }: LearningLabProps) {
             <WhatIfPanel
               title={selectedContent.title}
               originalValue={originalSelectedValue}
+              modifiedValue={modifiedSelectedValue}
               options={getLabOptions(selectedPart, email)}
               selected={changes[selectedPart]}
               onApply={applyChange}
               onReset={() => undoChange(selectedPart)}
-              demoComparison={demoComparison}
+              experiment={experiment}
+              loading={experimentLoading}
+              error={experimentError}
             />
             <div className="flex gap-2 rounded-xl border border-[#e1e6ee] bg-white p-4">
               <ShieldCheck size={17} className="mt-0.5 shrink-0 text-[#2f9167]"/>
@@ -223,7 +274,7 @@ function LearningLab({ email, onBack, onOpenMenu }: LearningLabProps) {
           </div>
         </div>
 
-        {/* Review locally selected changes; scores are mocked simulated. */}
+        {/* Review transformations confirmed by the backend. */}
         {appliedChanges.length > 0 && (
           <section className="mt-5 rounded-2xl border border-[#e1e6ee] bg-white p-5 shadow-sm md:p-6">
             <p className="text-[10px] font-bold uppercase tracking-wide text-[#6c56bd]">Stage 4 · Review learning</p>
@@ -243,8 +294,7 @@ function LearningLab({ email, onBack, onOpenMenu }: LearningLabProps) {
           </section>
         )}
 
-        {/* Bottom-of-page learning recap. This is educational guidance only;
-            its numeric comparison uses preset demo adjustments, not ML inference. */}
+        {/* Bottom-of-page recap uses the trained classifier response. */}
         <section className="mt-5 rounded-2xl border border-[#dce3f5] bg-[#f8f9ff] p-5 shadow-sm md:p-6">
           <div className="mb-4">
             <p className="text-[10px] font-bold uppercase tracking-wide text-[#6c56bd]">
@@ -266,8 +316,8 @@ function LearningLab({ email, onBack, onOpenMenu }: LearningLabProps) {
                   {changedPartNames.join(", ")}
                 </p>
                 <p className="mt-3 text-[11px] text-[#8a92a4]">
-                  Demo score: {demoComparison.originalScore}% → {demoComparison.modifiedScore}%
-                  {` (${demoComparison.difference > 0 ? "+" : ""}${demoComparison.difference} points)`}
+                  Real malicious probability: {experiment?.original_malicious_probability.toFixed(2)}% → {experiment?.modified_malicious_probability.toFixed(2)}%
+                  {experiment && ` (${experiment.score_change > 0 ? "+" : ""}${experiment.score_change.toFixed(2)} points)`}
                 </p>
               </div>
               <div className="rounded-xl border border-[#e1e6ee] bg-white p-4">

@@ -3,6 +3,7 @@
 from fastapi import APIRouter, HTTPException
 
 from app.models.schemas import WhatIfRequest, WhatIfResponse
+from app.services.demo_email_service import DemoEmailNotFoundError
 from app.services.gmail_service import (
     GmailAPIError,
     GmailAuthenticationError,
@@ -25,6 +26,8 @@ def what_if(request: WhatIfRequest) -> WhatIfResponse:
     except LearningLabValidationError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except GmailMessageNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except DemoEmailNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except GmailConfigurationError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc

@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic import BaseModel, Field, field_validator
 
 
@@ -25,6 +27,25 @@ class GmailMessageResponse(EmailClassificationResponse):
     date: str
     snippet: str
     body: str
+
+
+class DemoEmailResponse(EmailClassificationResponse):
+    id: str
+    source: Literal["demo"]
+    sender: str
+    sender_address: str
+    subject: str
+    preview: str
+    received_at: str
+    malicious_probability: float = Field(ge=0, le=100)
+    risk: Literal["Low", "Medium", "High"]
+    threat_category: str | None = None
+    greeting: str
+    body: str
+    request: str
+    action_label: str | None = None
+    attachment: str | None = None
+    signature: str | None = None
 
 
 class WhatIfTransformationRequest(BaseModel):
@@ -63,6 +84,7 @@ class AppliedTransformation(BaseModel):
 
 class WhatIfResponse(BaseModel):
     email_id: str
+    source: Literal["gmail", "demo"]
     original_classification: str
     original_confidence: float = Field(ge=0, le=100)
     original_malicious_probability: float = Field(ge=0, le=100)
@@ -74,4 +96,5 @@ class WhatIfResponse(BaseModel):
     applied_transformations: list[AppliedTransformation]
     modified_subject: str
     modified_body: str
+    modified_values: dict[str, str]
     warnings: list[str]

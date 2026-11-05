@@ -1,6 +1,7 @@
 
 export type Email = {
   id: string; // Gmail/FastAPI IDs are strings, e.g. "gmail_001".
+  source?: "demo" | "gmail" | "mock";
   sender: string;
   email: string;
   initials: string; // Display-only avatar initials.
@@ -11,6 +12,7 @@ export type Email = {
   received_at?: string;
   classification: "Legitimate" | "Potential threat";
   confidence: number; // 0-100.
+  maliciousProbability?: number; // 0-100, from the classifier when available.
   risk: "Low" | "Medium" | "High";
   threat_category?: string;
   greeting?: string;

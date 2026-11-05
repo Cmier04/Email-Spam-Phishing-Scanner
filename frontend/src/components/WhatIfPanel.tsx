@@ -1,25 +1,37 @@
-import { FlaskConical, RotateCcw } from "lucide-react";
+import { FlaskConical, LoaderCircle, RotateCcw } from "lucide-react";
+import type { WhatIfResponse } from "../api";
 import type { LabChange } from "../data/labTransformations";
-import type { DemoComparison } from "../data/demoScoring";
 
 type WhatIfPanelProps = {
   title: string;
   originalValue: string;
+  modifiedValue: string;
   options: LabChange[];
   selected?: LabChange;
   onApply: (change: LabChange) => void;
   onReset: () => void;
-  demoComparison: DemoComparison;
+  experiment: WhatIfResponse | null;
+  loading: boolean;
+  error: string | null;
 };
+
+function signedPoints(value: number) {
+  if (value > 0) return `+${value.toFixed(2)}`;
+  if (value < 0) return `−${Math.abs(value).toFixed(2)}`;
+  return "0.00";
+}
 
 function WhatIfPanel({
   title,
   originalValue,
+  modifiedValue,
   options,
   selected,
   onApply,
   onReset,
-  demoComparison,
+  experiment,
+  loading,
+  error,
 }: WhatIfPanelProps) {
   return (
     <section className="overflow-hidden rounded-2xl border border-[#e1e6ee] bg-white shadow-sm">
@@ -41,9 +53,10 @@ function WhatIfPanel({
           <button
             key={option.id}
             type="button"
+            disabled={loading}
             onClick={() => onApply(option)}
             aria-pressed={selected?.id === option.id}
-            className={`w-full rounded-xl border p-4 text-left transition focus-visible:outline-2 focus-visible:outline-[#3157d5] ${
+            className={`w-full rounded-xl border p-4 text-left transition focus-visible:outline-2 focus-visible:outline-[#3157d5] disabled:cursor-wait disabled:opacity-60 ${
               selected?.id === option.id
                 ? "border-[#8097df] bg-[#f3f5ff]"
                 : "border-[#e1e5eb] bg-white hover:border-[#bdc9e7]"
@@ -68,7 +81,7 @@ function WhatIfPanel({
         <div className="flex items-center justify-between gap-3">
           <h3 className="text-xs font-bold text-[#35415c]">Component comparison</h3>
           {selected && (
-            <button type="button" onClick={onReset} className="flex items-center gap-1 text-[11px] font-semibold text-[#3157d5]">
+            <button type="button" disabled={loading} onClick={onReset} className="flex items-center gap-1 text-[11px] font-semibold text-[#3157d5] disabled:opacity-50">
               <RotateCcw size={13} /> Undo this change
             </button>
           )}
@@ -80,50 +93,68 @@ function WhatIfPanel({
           </div>
           <div className={`rounded-xl border p-3 ${selected ? "border-[#cbd5f5] bg-[#f4f6ff]" : "border-[#e1e6ee] bg-white"}`}>
             <p className="mb-2 text-[10px] font-bold uppercase text-[#3157d5]">Modified copy</p>
-            <p className="break-words whitespace-pre-line text-xs leading-5 text-[#35415c]">{selected?.value ?? originalValue}</p>
+            <p className="break-words whitespace-pre-line text-xs leading-5 text-[#35415c]">{modifiedValue}</p>
           </div>
         </div>
-        {/* Mockdata. Displayed scores are simulated, not predictions from the classifier. */}
-        {/* Visual-only edits have no preset score effect; real scoring needs backend inference. */}
+
         <div className="mt-4 rounded-xl border border-[#dce3f5] bg-white p-4" aria-live="polite">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h3 className="text-xs font-bold text-[#35415c]">Detection comparison</h3>
-            <span className="rounded-full bg-[#fff2d9] px-2 py-1 text-[9px] font-bold uppercase text-[#95611b]">
-              Demo simulation
+            <span className="rounded-full bg-[#e9f7f0] px-2 py-1 text-[9px] font-bold uppercase text-[#277c58]">
+              Real classifier
             </span>
           </div>
 
-          <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            <div className="rounded-lg border border-[#e1e6ee] bg-[#fafbfc] p-3">
-              <p className="text-[10px] font-semibold text-[#7b8497]">Original sample score</p>
-              <p className="mt-1 text-xl font-bold text-[#26314c]">
-                {demoComparison.originalScore}%
-              </p>
-              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[#e5e9f1]">
-                <div className="h-full rounded-full bg-[#9ca5b8]" style={{ width: `${demoComparison.originalScore}%` }} />
+          {loading && (
+            <p className="mt-4 flex items-center gap-2 text-xs text-[#657087]">
+              <LoaderCircle size={14} className="animate-spin" /> Running the trained model...
+            </p>
+          )}
+          {error && <p className="mt-4 rounded-lg bg-[#fff1f1] p-3 text-xs text-[#a33a3a]" role="alert">{error}</p>}
+          {!loading && !experiment && !error && (
+            <p className="mt-4 text-xs leading-5 text-[#7b8497]">Choose a transformation to run a real before-and-after prediction.</p>
+          )}
+          {experiment && (
+            <>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <ScoreCard label="Original malicious probability" classification={experiment.original_classification} confidence={experiment.original_confidence} probability={experiment.original_malicious_probability} />
+                <ScoreCard label="Modified malicious probability" classification={experiment.modified_classification} confidence={experiment.modified_confidence} probability={experiment.modified_malicious_probability} modified />
               </div>
-            </div>
-            <div className="rounded-lg border border-[#cbd5f5] bg-[#f4f6ff] p-3">
-              <p className="text-[10px] font-semibold text-[#6476aa]">Modified simulated score</p>
-              <p className="mt-1 text-xl font-bold text-[#3157d5]">
-                {demoComparison.modifiedScore}%
+              <p className="mt-3 text-xs font-semibold text-[#35415c]">
+                Difference: {signedPoints(experiment.score_change)} percentage points
               </p>
-              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[#e0e6fa]">
-                <div className="h-full rounded-full bg-[#3157d5]" style={{ width: `${demoComparison.modifiedScore}%` }} />
-              </div>
-            </div>
-          </div>
-
-          <p className="mt-3 text-xs font-semibold text-[#35415c]">
-            Difference: {demoComparison.difference > 0 ? "+" : demoComparison.difference < 0 ? "−" : ""}
-            {Math.abs(demoComparison.difference)} percentage points
-          </p>
-          <p className="mt-1 text-[10px] leading-5 text-[#8a92a4]">
-            {demoComparison.changedCount} applied change{demoComparison.changedCount === 1 ? "" : "s"}.
-          </p>
+              <p className="mt-1 text-[10px] leading-5 text-[#657087]">
+                Decision {experiment.decision_changed ? "changed" : "did not change"}.
+              </p>
+              {experiment.warnings.length > 0 && (
+                <ul className="mt-3 list-disc space-y-1 rounded-lg bg-[#fff8e8] p-3 pl-7 text-[10px] leading-5 text-[#805b16]">
+                  {experiment.warnings.map((warning) => <li key={warning}>{warning}</li>)}
+                </ul>
+              )}
+            </>
+          )}
         </div>
       </div>
     </section>
+  );
+}
+
+function ScoreCard({ label, classification, confidence, probability, modified = false }: {
+  label: string;
+  classification: string;
+  confidence: number;
+  probability: number;
+  modified?: boolean;
+}) {
+  return (
+    <div className={`rounded-lg border p-3 ${modified ? "border-[#cbd5f5] bg-[#f4f6ff]" : "border-[#e1e6ee] bg-[#fafbfc]"}`}>
+      <p className="text-[10px] font-semibold text-[#7b8497]">{label}</p>
+      <p className={`mt-1 text-xl font-bold ${modified ? "text-[#3157d5]" : "text-[#26314c]"}`}>{probability.toFixed(2)}%</p>
+      <p className="mt-1 text-[10px] text-[#657087]">{classification} · {confidence.toFixed(2)}% confidence</p>
+      <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[#e5e9f1]">
+        <div className={`h-full rounded-full ${modified ? "bg-[#3157d5]" : "bg-[#9ca5b8]"}`} style={{ width: `${probability}%` }} />
+      </div>
+    </div>
   );
 }
 

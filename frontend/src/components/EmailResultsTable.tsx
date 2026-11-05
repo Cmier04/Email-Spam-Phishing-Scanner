@@ -238,7 +238,7 @@ function EmailResultsTable({ emails, onSelect }: EmailResultsTableProps) {
       </div>
 
       <div className="border-t border-[#e9ecf1] px-6 py-4 text-[11px] text-[#8a92a4]">
-        Showing {visibleEmails.length} of {emails.length} mock emails
+        Showing {visibleEmails.length} of {emails.length} synthetic demo emails
       </div>
     </section>
   );

@@ -15,6 +15,7 @@ class ExistingAPIRegressionTests(unittest.TestCase):
         self.assertIn("get", paths["/api/gmail/latest"])
         self.assertIn("get", paths["/api/gmail/recent"])
         self.assertIn("post", paths["/api/what-if"])
+        self.assertIn("get", paths["/api/demo/emails"])
 
     def test_classify_endpoint_preserves_service_result(self):
         expected = {"classification": "Legitimate", "confidence": 91.5}

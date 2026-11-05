@@ -1,5 +1,5 @@
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   Inbox,
   CircleCheck,
@@ -13,8 +13,8 @@ import MetricCard from "./components/MetricCard";
 import EmailResultsTable from "./components/EmailResultsTable";
 import EmailDetail from "./components/EmailDetail";
 
-import { mockEmails } from "./data/mockEmails";
 import type { Email } from "./data/mockEmails";
+import { getDemoEmails } from "./api";
 
 function App() {
   // Controls the visibility of the mobile sidebar.
@@ -24,6 +24,42 @@ function App() {
   const [selectedEmail, setSelectedEmail] = useState<Email | null>(
     null
   );
+  const [emails, setEmails] = useState<Email[]>([]);
+  const [demoLoading, setDemoLoading] = useState(true);
+  const [demoError, setDemoError] = useState<string | null>(null);
+
+  const loadDemoEmails = useCallback(async () => {
+    setDemoLoading(true);
+    setDemoError(null);
+    try {
+      setEmails(await getDemoEmails());
+    } catch (error) {
+      setDemoError(error instanceof Error ? error.message : "Unable to load demo emails.");
+    } finally {
+      setDemoLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    getDemoEmails()
+      .then((loadedEmails) => {
+        if (!cancelled) setEmails(loadedEmails);
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) {
+          setDemoError(
+            error instanceof Error ? error.message : "Unable to load demo emails.",
+          );
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setDemoLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   function openEmail(email: Email) {
     setSelectedEmail(email);
@@ -111,8 +147,19 @@ function App() {
               </section>
 
               {/* Display sample emails and open their analysis pages. */}
+              {demoError && (
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#f0caca] bg-[#fff7f7] p-4 text-sm text-[#9f3434]" role="alert">
+                  <span>{demoError}</span>
+                  <button type="button" onClick={() => void loadDemoEmails()} className="font-semibold underline">
+                    Retry
+                  </button>
+                </div>
+              )}
+              {demoLoading && (
+                <p className="mb-4 text-sm text-[#747e93]">Loading classifier-backed demo emails...</p>
+              )}
               <EmailResultsTable
-                emails={mockEmails}
+                emails={emails}
                 onSelect={openEmail}
               />
             </div>
