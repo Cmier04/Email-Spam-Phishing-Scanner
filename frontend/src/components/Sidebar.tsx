@@ -1,4 +1,3 @@
-
 import {
   ShieldCheck,
   LayoutDashboard,
@@ -9,12 +8,27 @@ import {
   X,
 } from "lucide-react";
 
+export type AppPage = "dashboard" | "settings";
+
 type SidebarProps = {
   isOpen: boolean;
   onClose: () => void;
+  activePage: AppPage;
+  onNavigate: (page: AppPage) => void;
 };
 
-function Sidebar({ isOpen, onClose }: SidebarProps) {
+function Sidebar({
+  isOpen,
+  onClose,
+  activePage,
+  onNavigate,
+}: SidebarProps) {
+  const activeStyle =
+    "bg-[#eef2ff] text-[#3157d5]";
+
+  const inactiveStyle =
+    "text-[#687288] hover:bg-[#f5f7fb] hover:text-[#3157d5]";
+
   return (
     <>
       {isOpen && (
@@ -27,7 +41,7 @@ function Sidebar({ isOpen, onClose }: SidebarProps) {
       )}
 
       <aside
-        className={`fixed inset-y-0 left-0 z-50 flex w-[248px] flex-col border-r border-[#e4e8ef] bg-white px-4 py-6 transition-transform lg:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-50 flex w-[248px] flex-col overflow-y-auto border-r border-[#e4e8ef] bg-white px-4 py-6 transition-transform lg:translate-x-0 ${
           isOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
@@ -39,7 +53,7 @@ function Sidebar({ isOpen, onClose }: SidebarProps) {
             </div>
 
             <span className="text-[17px] font-bold text-[#17213c]">
-              Project Name
+              PhishLab
             </span>
           </div>
 
@@ -54,21 +68,32 @@ function Sidebar({ isOpen, onClose }: SidebarProps) {
         </div>
 
         {/* Main navigation */}
-        <nav className="space-y-1">
-          <a
-            href="/"
-            aria-current="page"
-            onClick={onClose}
-            className="flex items-center gap-3 rounded-lg bg-[#eef2ff] px-3 py-2.5 text-xs font-semibold text-[#3157d5]"
+        <nav
+          aria-label="Main navigation"
+          className="space-y-1"
+        >
+          <button
+            type="button"
+            onClick={() => onNavigate("dashboard")}
+            aria-current={
+              activePage === "dashboard"
+                ? "page"
+                : undefined
+            }
+            className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-xs font-semibold transition ${
+              activePage === "dashboard"
+                ? activeStyle
+                : inactiveStyle
+            }`}
           >
             <LayoutDashboard size={18} />
             <span>Dashboard</span>
-          </a>
+          </button>
 
           <button
             type="button"
             disabled
-            title="Temp"
+            title="Coming soon"
             className="flex w-full cursor-not-allowed items-center gap-3 rounded-lg px-3 py-2.5 text-xs font-semibold text-[#687288] opacity-60"
           >
             <Mail size={18} />
@@ -81,12 +106,23 @@ function Sidebar({ isOpen, onClose }: SidebarProps) {
           Workspace
         </p>
 
-        <nav className="space-y-1">
+        <nav
+          aria-label="Workspace navigation"
+          className="space-y-1"
+        >
           <button
             type="button"
-            disabled
-            title="Temp"
-            className="flex w-full cursor-not-allowed items-center gap-3 rounded-lg px-3 py-2.5 text-xs font-semibold text-[#687288] opacity-60"
+            onClick={() => onNavigate("settings")}
+            aria-current={
+              activePage === "settings"
+                ? "page"
+                : undefined
+            }
+            className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-xs font-semibold transition ${
+              activePage === "settings"
+                ? activeStyle
+                : inactiveStyle
+            }`}
           >
             <Settings size={18} />
             <span>Settings</span>
@@ -95,7 +131,7 @@ function Sidebar({ isOpen, onClose }: SidebarProps) {
           <button
             type="button"
             disabled
-            title="Temp"
+            title="Coming soon"
             className="flex w-full cursor-not-allowed items-center gap-3 rounded-lg px-3 py-2.5 text-xs font-semibold text-[#687288] opacity-60"
           >
             <CircleHelp size={18} />
@@ -103,7 +139,7 @@ function Sidebar({ isOpen, onClose }: SidebarProps) {
           </button>
         </nav>
 
-        {/* Connection status placeholder */}
+        {/* Gmail status */}
         <div className="mt-auto rounded-xl border border-[#e5e9f0] bg-[#f8f9fc] p-3.5">
           <div className="flex items-center gap-2 text-xs font-semibold text-[#28334f]">
             <span className="h-2 w-2 rounded-full bg-[#a1a8b8]" />
@@ -111,7 +147,7 @@ function Sidebar({ isOpen, onClose }: SidebarProps) {
           </div>
 
           <p className="mt-2 text-[11px] text-[#788197]">
-            johndoe@gmail.com
+            Synthetic demo emails only
           </p>
         </div>
 
@@ -127,7 +163,7 @@ function Sidebar({ isOpen, onClose }: SidebarProps) {
             </p>
 
             <p className="text-[11px] text-[#8a92a4]">
-              Temp
+              Prototype profile
             </p>
           </div>
 

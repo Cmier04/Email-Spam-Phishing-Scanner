@@ -1,50 +1,117 @@
-
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
-  Inbox,
   CircleCheck,
-  TriangleAlert,
+  Inbox,
   ShieldCheck,
+  TriangleAlert,
 } from "lucide-react";
 
-import Sidebar from "./components/Sidebar";
+import Sidebar, { type AppPage } from "./components/Sidebar";
 import Header from "./components/Header";
 import MetricCard from "./components/MetricCard";
 import EmailResultsTable from "./components/EmailResultsTable";
 import EmailDetail from "./components/EmailDetail";
+import SettingsPage from "./components/SettingsPage";
 
-import { mockEmails } from "./data/mockEmails";
+import { getDemoEmails } from "./api";
 import type { Email } from "./data/mockEmails";
 
 function App() {
-  // Controls the visibility of the mobile sidebar.
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [activePage, setActivePage] =
+    useState<AppPage>("dashboard");
+  const [selectedEmail, setSelectedEmail] =
+    useState<Email | null>(null);
 
-  // Stores the email currently open in the analysis view.
-  const [selectedEmail, setSelectedEmail] = useState<Email | null>(
-    null
-  );
+  // Load synthetic examples classified by the local ML model.
+  const [emails, setEmails] = useState<Email[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [reloadCount, setReloadCount] = useState(0);
+
+  const reloadEmails = useCallback(() => {
+    setLoading(true);
+    setError(null);
+    setReloadCount((count) => count + 1);
+  }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    getDemoEmails(controller.signal)
+      .then((loaded) => {
+        if (!controller.signal.aborted) {
+          setEmails(loaded);
+        }
+      })
+      .catch((failure: unknown) => {
+        if (controller.signal.aborted) return;
+
+        setEmails([]);
+        setError(
+          failure instanceof Error
+            ? failure.message
+            : "Could not load the demonstration emails."
+        );
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) {
+          setLoading(false);
+        }
+      });
+
+    return () => controller.abort();
+  }, [reloadCount]);
+
+  function navigate(page: AppPage) {
+    setActivePage(page);
+    setSelectedEmail(null);
+    setSidebarOpen(false);
+    window.scrollTo(0, 0);
+  }
 
   function openEmail(email: Email) {
     setSelectedEmail(email);
-    window.scrollTo({ top: 0, behavior: "instant" });
+    window.scrollTo(0, 0);
   }
+
+  // Statistics are calculated from returned emails.
+  const legitimateCount = emails.filter(
+    (email) => email.classification === "Legitimate"
+  ).length;
+
+  const threatCount = emails.filter(
+    (email) => email.classification === "Potential threat"
+  ).length;
+
+  const meanConfidence =
+    emails.length > 0
+      ? Math.round(
+          emails.reduce(
+            (sum, email) => sum + email.confidence,
+            0
+          ) / emails.length
+        )
+      : null;
 
   return (
     <div className="min-h-screen bg-[#f6f8fb] text-[#17213c]">
-      {/* Sidebar navigation */}
       <Sidebar
         isOpen={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
+        activePage={activePage}
+        onNavigate={navigate}
       />
 
-      {/* Main dashboard layout */}
-      <main className="lg:ml-[248px]">
+      <main className="min-h-screen lg:ml-[248px]">
         {selectedEmail ? (
-          /* Show the selected email analysis. */
           <EmailDetail
             email={selectedEmail}
             onBack={() => setSelectedEmail(null)}
+            onOpenMenu={() => setSidebarOpen(true)}
+          />
+        ) : activePage === "settings" ? (
+          <SettingsPage
             onOpenMenu={() => setSidebarOpen(true)}
           />
         ) : (
@@ -62,57 +129,87 @@ function App() {
                   </h2>
 
                   <p className="mt-1 text-sm text-[#747e93]">
-                    Testing.
+                    Explore sample emails classified by the local ML model.
                   </p>
                 </div>
 
                 <div className="flex items-center gap-2 text-xs font-medium text-[#687288]">
                   <span className="h-2 w-2 rounded-full bg-[#94a3b8]" />
-                  Protecting
+                  FastAPI demo · No Gmail connection
                 </div>
               </div>
 
-              {/* Dashboard statistics use temporary values for now. */}
+              {/* Statistics from the loaded synthetic emails. */}
               <section
                 aria-label="Email statistics"
                 className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4"
               >
                 <MetricCard
                   label="Emails scanned"
-                  value="1,284"
-                  note="+48 this week"
+                  value={String(emails.length)}
+                  note="synthetic examples"
                   icon={Inbox}
                   color="blue"
                 />
 
                 <MetricCard
                   label="Legitimate"
-                  value="1,247"
-                  note="97.1% of emails"
+                  value={String(legitimateCount)}
+                  note="model classifications"
                   icon={CircleCheck}
                   color="green"
                 />
 
                 <MetricCard
                   label="Potential threats"
-                  value="37"
-                  note="12 need review"
+                  value={String(threatCount)}
+                  note="model classifications"
                   icon={TriangleAlert}
                   color="red"
                 />
 
                 <MetricCard
-                  label="Protection score"
-                  value="96%"
-                  note="Excellent"
+                  label="Avg. confidence"
+                  value={
+                    meanConfidence === null
+                      ? "—"
+                      : `${meanConfidence}%`
+                  }
+                  note="among loaded examples"
                   icon={ShieldCheck}
                   color="violet"
                 />
               </section>
 
-              {/* Display sample emails and open their analysis pages. */}
+              {/* API errors and retry button */}
+              {error && (
+                <div
+                  role="alert"
+                  className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#f0caca] bg-[#fff7f7] p-4 text-xs text-[#9f3434]"
+                >
+                  <span>{error}</span>
+
+                  <button
+                    type="button"
+                    onClick={reloadEmails}
+                    className="font-semibold underline"
+                  >
+                    Retry
+                  </button>
+                </div>
+              )}
+
+              {loading && (
+                <p
+                  role="status"
+                  className="mb-4 text-xs text-[#747e93]"
+                >
+                  Loading model-classified examples from FastAPI...
+                </p>
+              )}
+
               <EmailResultsTable
-                emails={mockEmails}
+                emails={emails}
                 onSelect={openEmail}
               />
             </div>
