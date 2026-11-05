@@ -1,3 +1,4 @@
+
 import {
   useState,
   type ChangeEvent,
@@ -9,7 +10,6 @@ import {
   BookOpen,
   CalendarDays,
   Download,
-  Info,
   Mail,
   Menu,
   RotateCcw,
@@ -114,16 +114,13 @@ function SettingToggle({
 function SettingsPage({
   onOpenMenu,
 }: SettingsPageProps) {
-  // Settings are saved locally, not to FastAPI.
+  // Preferences are saved locally, not to FastAPI.
   const [preferences, setPreferences] =
     useState<SettingsPreferences>(loadSettings);
 
-  const [storageAvailable, setStorageAvailable] =
-    useState(true);
-
   function updatePreferences(next: SettingsPreferences) {
     setPreferences(next);
-    setStorageAvailable(saveSettings(next));
+    saveSettings(next);
   }
 
   function toggle(
@@ -141,6 +138,7 @@ function SettingsPage({
 
   return (
     <>
+      {/* Settings header */}
       <header className="flex min-h-[72px] items-center gap-3 border-b border-[#e4e8ef] bg-white px-5 md:px-8">
         <button
           type="button"
@@ -159,50 +157,22 @@ function SettingsPage({
       </header>
 
       <div className="mx-auto max-w-[920px] px-5 py-7 md:px-8 md:py-9">
-        <div className="mb-7 flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h2 className="text-[26px] font-bold tracking-tight text-[#17213c]">
-              Account settings
-            </h2>
+        {/* Page title */}
+        <div className="mb-7">
+          <h2 className="text-[26px] font-bold tracking-tight text-[#17213c]">
+            Account settings
+          </h2>
 
-            <p className="mt-1 text-sm text-[#747e93]">
-              Manage your preferences and review which features are available.
-            </p>
-          </div>
-
-          <span className="rounded-full bg-[#eef1f6] px-3 py-1.5 text-[11px] font-semibold text-[#677287]">
-            Frontend preview
-          </span>
-        </div>
-
-        <div className="mb-5 flex items-start gap-3 rounded-xl border border-[#dce3f5] bg-[#f8f9ff] p-4">
-          <Info
-            size={17}
-            className="mt-0.5 shrink-0 text-[#3157d5]"
-          />
-
-          <div>
-            <p className="text-xs font-semibold text-[#35415c]">
-              Preferences are local to this browser
-            </p>
-
-            <p className="mt-1 text-xs leading-5 text-[#657087]">
-              Switches and retention choices are saved as prototype preferences only.
-              They do not start Gmail scanning, send notifications, or delete stored emails.
-            </p>
-
-            {!storageAvailable && (
-              <p className="mt-2 text-xs font-semibold text-[#b8493b]">
-                Browser storage is unavailable, so changes may be lost after a refresh.
-              </p>
-            )}
-          </div>
+          <p className="mt-1 text-sm text-[#747e93]">
+            Manage your preferences and review which features are available.
+          </p>
         </div>
 
         <div className="space-y-5">
+          {/* Connected inbox */}
           <SettingsSection
             title="Connected inbox"
-            description="View the email service connected to InboxGuard."
+            description="View the email service connected to PhishLab."
           >
             <div className="flex flex-wrap items-center justify-between gap-4 py-4">
               <div className="flex items-center gap-3">
@@ -233,11 +203,12 @@ function SettingsPage({
                 title="Available after Gmail authentication is implemented"
                 className="cursor-not-allowed rounded-lg border border-[#dfe4eb] bg-[#f7f8fa] px-3.5 py-2 text-[11px] font-semibold text-[#9aa2b0]"
               >
-                Connect Gmail · Coming later
+                Connect Gmail
               </button>
             </div>
           </SettingsSection>
 
+          {/* Scanning preferences */}
           <SettingsSection
             title="Scanning preferences"
             description="Choose how you would like email scanning to work when connected."
@@ -299,6 +270,7 @@ function SettingsPage({
             </div>
           </SettingsSection>
 
+          {/* Notifications */}
           <SettingsSection
             title="Notifications"
             description="Set your preferred alerts for when notification delivery becomes available."
@@ -320,6 +292,7 @@ function SettingsPage({
             />
           </SettingsSection>
 
+          {/* Data and privacy */}
           <SettingsSection
             title="Data and privacy"
             description="Data management will become available after backend integration."
@@ -346,7 +319,7 @@ function SettingsPage({
                 disabled
                 className="cursor-not-allowed rounded-lg border border-[#dfe4eb] bg-[#f7f8fa] px-3.5 py-2 text-[11px] font-semibold text-[#9aa2b0]"
               >
-                Export · Coming later
+                Export
               </button>
             </div>
 
@@ -372,19 +345,14 @@ function SettingsPage({
                 disabled
                 className="cursor-not-allowed rounded-lg border border-[#f0d0ca] bg-[#fff8f7] px-3.5 py-2 text-[11px] font-semibold text-[#d09b92]"
               >
-                Delete · Coming later
+                Delete
               </button>
             </div>
           </SettingsSection>
         </div>
 
-        <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
-          <p className="text-xs text-[#9299aa]">
-            {storageAvailable
-              ? "Preferences are stored in this browser when changed."
-              : "Preferences are temporary in this session."}
-          </p>
-
+        {/* Reset preferences */}
+        <div className="mt-6 flex justify-end">
           <button
             type="button"
             onClick={() =>

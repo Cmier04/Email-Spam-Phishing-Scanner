@@ -118,6 +118,9 @@ function App() {
           <>
             <Header
               onOpenMenu={() => setSidebarOpen(true)}
+              loading={loading}
+              error={error}
+              onRetry={reloadEmails}
             />
 
             <div className="mx-auto max-w-[1280px] px-5 py-7 md:px-8 md:py-9">
@@ -180,24 +183,6 @@ function App() {
                   color="violet"
                 />
               </section>
-
-              {/* API errors and retry button */}
-              {error && (
-                <div
-                  role="alert"
-                  className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#f0caca] bg-[#fff7f7] p-4 text-xs text-[#9f3434]"
-                >
-                  <span>{error}</span>
-
-                  <button
-                    type="button"
-                    onClick={reloadEmails}
-                    className="font-semibold underline"
-                  >
-                    Retry
-                  </button>
-                </div>
-              )}
 
               {loading && (
                 <p

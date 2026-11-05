@@ -137,7 +137,7 @@ function EmailResultsTable({
                 <tr
                   key={email.id}
                   onClick={() => onSelect(email)}
-                  className="border-b border-[#eef0f4] last:border-0"
+                  className="group cursor-pointer border-b border-[#eef0f4] transition-colors duration-150 hover:bg-[#f2f4f7] last:border-0"
                 >
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3">
@@ -218,7 +218,7 @@ function EmailResultsTable({
                         event.stopPropagation();
                         onSelect(email);
                       }}
-                      className="rounded-md p-1 text-[#abb1be] hover:bg-[#eef2ff] hover:text-[#3157d5] focus-visible:outline-2 focus-visible:outline-[#3157d5]"
+                      className="rounded-md p-1 text-[#abb1be] transition-all duration-150 group-hover:translate-x-0.5 group-hover:text-[#3157d5] hover:bg-[#e5e9f1] focus-visible:outline-2 focus-visible:outline-[#3157d5]"
                     >
                       <ChevronRight size={17} />
                     </button>
