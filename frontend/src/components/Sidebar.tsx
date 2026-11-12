@@ -1,3 +1,4 @@
+
 import {
   ShieldCheck,
   LayoutDashboard,
@@ -8,7 +9,7 @@ import {
   X,
 } from "lucide-react";
 
-export type AppPage = "dashboard" | "settings";
+export type AppPage = "dashboard" | "results" | "settings" | "help";
 
 type SidebarProps = {
   isOpen: boolean;
@@ -92,9 +93,17 @@ function Sidebar({
 
           <button
             type="button"
-            disabled
-            title="Coming soon"
-            className="flex w-full cursor-not-allowed items-center gap-3 rounded-lg px-3 py-2.5 text-xs font-semibold text-[#687288] opacity-60"
+            onClick={() => onNavigate("results")}
+            aria-current={
+              activePage === "results"
+                ? "page"
+                : undefined
+            }
+            className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-xs font-semibold transition ${
+              activePage === "results"
+                ? activeStyle
+                : inactiveStyle
+            }`}
           >
             <Mail size={18} />
             <span>Scan results</span>
@@ -130,9 +139,17 @@ function Sidebar({
 
           <button
             type="button"
-            disabled
-            title="Coming soon"
-            className="flex w-full cursor-not-allowed items-center gap-3 rounded-lg px-3 py-2.5 text-xs font-semibold text-[#687288] opacity-60"
+            onClick={() => onNavigate("help")}
+            aria-current={
+              activePage === "help"
+                ? "page"
+                : undefined
+            }
+            className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-xs font-semibold transition ${
+              activePage === "help"
+                ? activeStyle
+                : inactiveStyle
+            }`}
           >
             <CircleHelp size={18} />
             <span>Help center</span>

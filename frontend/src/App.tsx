@@ -1,3 +1,4 @@
+
 import { useCallback, useEffect, useState } from "react";
 import {
   CircleCheck,
@@ -10,8 +11,10 @@ import Sidebar, { type AppPage } from "./components/Sidebar";
 import Header from "./components/Header";
 import MetricCard from "./components/MetricCard";
 import EmailResultsTable from "./components/EmailResultsTable";
+import ScanResultsPage from "./components/ScanResultsPage";
 import EmailDetail from "./components/EmailDetail";
 import SettingsPage from "./components/SettingsPage";
+import HelpCenterPage from "./components/HelpCenterPage";
 
 import { getDemoEmails } from "./api";
 import type { Email } from "./data/mockEmails";
@@ -23,11 +26,15 @@ function App() {
   const [selectedEmail, setSelectedEmail] =
     useState<Email | null>(null);
 
-  // Load synthetic examples classified by the local ML model.
+  // Synthetic examples are fetched from FastAPI, which runs the local classifier.
   const [emails, setEmails] = useState<Email[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [reloadCount, setReloadCount] = useState(0);
+
+  // Last successful demo result fetch, not a Gmail scan timestamp.
+  const [lastLoadedAt, setLastLoadedAt] =
+    useState<number | null>(null);
 
   const reloadEmails = useCallback(() => {
     setLoading(true);
@@ -42,6 +49,8 @@ function App() {
       .then((loaded) => {
         if (!controller.signal.aborted) {
           setEmails(loaded);
+          setError(null);
+          setLastLoadedAt(Date.now());
         }
       })
       .catch((failure: unknown) => {
@@ -114,6 +123,11 @@ function App() {
           <SettingsPage
             onOpenMenu={() => setSidebarOpen(true)}
           />
+        ) : activePage === "help" ? (
+          <HelpCenterPage
+            onOpenMenu={() => setSidebarOpen(true)}
+            onNavigate={navigate}
+          />
         ) : (
           <>
             <Header
@@ -121,83 +135,130 @@ function App() {
               loading={loading}
               error={error}
               onRetry={reloadEmails}
+              lastLoadedAt={lastLoadedAt}
+              title={
+                activePage === "results"
+                  ? "Scan results"
+                  : "Dashboard"
+              }
+              subtitle={
+                activePage === "results"
+                  ? "Review email classifications"
+                  : "Monitor and protect your inbox"
+              }
             />
 
-            <div className="mx-auto max-w-[1280px] px-5 py-7 md:px-8 md:py-9">
-              {/* Dashboard welcome section */}
-              <div className="mb-7 flex flex-wrap items-end justify-between gap-4">
-                <div>
-                  <h2 className="text-[26px] font-bold tracking-tight text-[#17213c]">
-                    Good Afternoon John Doe,
-                  </h2>
-
-                  <p className="mt-1 text-sm text-[#747e93]">
-                    Explore sample emails classified by the local ML model.
-                  </p>
-                </div>
-
-                <div className="flex items-center gap-2 text-xs font-medium text-[#687288]">
-                  <span className="h-2 w-2 rounded-full bg-[#94a3b8]" />
-                  FastAPI demo · No Gmail connection
-                </div>
-              </div>
-
-              {/* Statistics from the loaded synthetic emails. */}
-              <section
-                aria-label="Email statistics"
-                className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4"
-              >
-                <MetricCard
-                  label="Emails scanned"
-                  value={String(emails.length)}
-                  note="synthetic examples"
-                  icon={Inbox}
-                  color="blue"
-                />
-
-                <MetricCard
-                  label="Legitimate"
-                  value={String(legitimateCount)}
-                  note="model classifications"
-                  icon={CircleCheck}
-                  color="green"
-                />
-
-                <MetricCard
-                  label="Potential threats"
-                  value={String(threatCount)}
-                  note="model classifications"
-                  icon={TriangleAlert}
-                  color="red"
-                />
-
-                <MetricCard
-                  label="Avg. confidence"
-                  value={
-                    meanConfidence === null
-                      ? "—"
-                      : `${meanConfidence}%`
-                  }
-                  note="among loaded examples"
-                  icon={ShieldCheck}
-                  color="violet"
-                />
-              </section>
-
-              {loading && (
-                <p
-                  role="status"
-                  className="mb-4 text-xs text-[#747e93]"
-                >
-                  Loading model-classified examples from FastAPI...
-                </p>
-              )}
-
-              <EmailResultsTable
+            {activePage === "results" ? (
+              <ScanResultsPage
                 emails={emails}
+                loading={loading}
+                error={error}
                 onSelect={openEmail}
               />
-            </div>
+            ) : (
+              <div className="mx-auto max-w-[1280px] px-5 py-7 md:px-8 md:py-9">
+                {/* Dashboard welcome section */}
+                <div className="mb-7 flex flex-wrap items-end justify-between gap-4">
+                  <div>
+                    <h2 className="text-[26px] font-bold tracking-tight text-[#17213c]">
+                      Good Afternoon John Doe,
+                    </h2>
+
+                    <p className="mt-1 text-sm text-[#747e93]">
+                      Explore sample emails classified by the local ML model.
+                    </p>
+                  </div>
+
+                  <div
+                    role="status"
+                    className={`flex items-center gap-2 text-xs font-semibold ${
+                      error
+                        ? "text-[#c03939]"
+                        : loading
+                          ? "text-[#818b9e]"
+                          : "text-[#277c58]"
+                    }`}
+                    title={
+                      error ??
+                      "Local FastAPI demo connection; Gmail scanning is not enabled."
+                    }
+                  >
+                    <span
+                      aria-hidden="true"
+                      className={`h-2.5 w-2.5 rounded-full ${
+                        error
+                          ? "bg-[#cf4545]"
+                          : loading
+                            ? "bg-[#e2ad4c]"
+                            : "bg-[#31a46c]"
+                      }`}
+                    />
+                    {error
+                      ? "Offline · Connection failed"
+                      : loading
+                        ? "Connecting..."
+                        : "Connected"}
+                  </div>
+                </div>
+
+                {/* Statistics from the loaded synthetic emails. */}
+                <section
+                  aria-label="Email statistics"
+                  className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4"
+                >
+                  <MetricCard
+                    label="Emails scanned"
+                    value={String(emails.length)}
+                    note="synthetic examples"
+                    icon={Inbox}
+                    color="blue"
+                  />
+
+                  <MetricCard
+                    label="Legitimate"
+                    value={String(legitimateCount)}
+                    note="model classifications"
+                    icon={CircleCheck}
+                    color="green"
+                  />
+
+                  <MetricCard
+                    label="Potential threats"
+                    value={String(threatCount)}
+                    note="model classifications"
+                    icon={TriangleAlert}
+                    color="red"
+                  />
+
+                  <MetricCard
+                    label="Avg. confidence"
+                    value={
+                      meanConfidence === null
+                        ? "—"
+                        : `${meanConfidence}%`
+                    }
+                    note="among loaded examples"
+                    icon={ShieldCheck}
+                    color="violet"
+                  />
+                </section>
+
+                {loading && (
+                  <p
+                    role="status"
+                    className="mb-4 text-xs text-[#747e93]"
+                  >
+                    Loading model-classified examples from FastAPI...
+                  </p>
+                )}
+
+                <EmailResultsTable
+                  emails={emails}
+                  onSelect={openEmail}
+                  onViewAll={() => navigate("results")}
+                />
+              </div>
+            )}
           </>
         )}
       </main>

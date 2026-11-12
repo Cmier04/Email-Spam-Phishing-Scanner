@@ -1,3 +1,4 @@
+
 import type { Email } from "./data/mockEmails";
 import type { WhatIfRequest } from "./data/labTransformations";
 
@@ -35,6 +36,14 @@ export type AppliedTransformation = {
   message: string;
 };
 
+// All three fields can be generated in the backend without changing the classifier model.
+export type BackendLearningSummary = {
+  changes_made: string[];
+  why_it_mattered: string;
+  what_you_should_learn: string;
+};
+
+// Matches the existing FastAPI response.
 export type WhatIfResponse = {
   email_id: string;
   source: "gmail" | "demo";
@@ -51,6 +60,7 @@ export type WhatIfResponse = {
   modified_body: string;
   modified_values: Record<string, string>;
   warnings: string[];
+  learning_summary?: BackendLearningSummary;
 };
 
 export class ApiError extends Error {
@@ -164,6 +174,21 @@ function isDemoEmail(value: unknown): value is DemoEmailResponse {
   );
 }
 
+function isLearningSummary(
+  value: unknown
+): value is BackendLearningSummary {
+  if (!isRecord(value)) return false;
+
+  return (
+    Array.isArray(value.changes_made) &&
+    value.changes_made.every(
+      (item) => typeof item === "string"
+    ) &&
+    typeof value.why_it_mattered === "string" &&
+    typeof value.what_you_should_learn === "string"
+  );
+}
+
 function isWhatIfResponse(value: unknown): value is WhatIfResponse {
   if (!isRecord(value)) return false;
 
@@ -190,6 +215,10 @@ function isWhatIfResponse(value: unknown): value is WhatIfResponse {
     Array.isArray(value.warnings) &&
     value.warnings.every(
       (warning) => typeof warning === "string"
+    ) &&
+    (
+      value.learning_summary === undefined ||
+      isLearningSummary(value.learning_summary)
     ) &&
     Array.isArray(applications) &&
     applications.every(

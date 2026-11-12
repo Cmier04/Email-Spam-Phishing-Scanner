@@ -1,3 +1,4 @@
+
 import { useState } from "react";
 import { ChevronRight, Search } from "lucide-react";
 import type { Email } from "../data/mockEmails";
@@ -7,6 +8,7 @@ type EmailFilter = "All emails" | Email["classification"];
 type EmailResultsTableProps = {
   emails: Email[];
   onSelect: (email: Email) => void;
+  onViewAll: () => void;
 };
 
 const filters: EmailFilter[] = [
@@ -29,16 +31,12 @@ const riskStyles: Record<Email["risk"], string> = {
   High: "bg-[#ffebe7] text-[#b8493b]",
 };
 
-function EmailResultsTable({
-  emails,
-  onSelect,
-}: EmailResultsTableProps) {
+function EmailResultsTable({ emails, onSelect, onViewAll }: EmailResultsTableProps) {
   const [search, setSearch] = useState("");
-  const [filter, setFilter] =
-    useState<EmailFilter>("All emails");
+  const [filter, setFilter] = useState<EmailFilter>("All emails");
 
-  // Only display emails matching the filter and search.
-  const visibleEmails = emails.filter((email) => {
+  // Display only emails that match the selected filter and search.
+  const matchingEmails = emails.filter((email) => {
     const matchesFilter =
       filter === "All emails" ||
       email.classification === filter;
@@ -52,6 +50,9 @@ function EmailResultsTable({
 
     return matchesFilter && matchesSearch;
   });
+
+  // Keep the dashboard a short preview; the full page handles all results.
+  const visibleEmails = matchingEmails.slice(0, 6);
 
   return (
     <section className="overflow-hidden rounded-2xl border border-[#e1e6ee] bg-white shadow-sm">
@@ -68,9 +69,8 @@ function EmailResultsTable({
 
         <button
           type="button"
-          disabled
-          title="Full results page will be added later"
-          className="flex cursor-not-allowed items-center gap-1 text-xs font-semibold text-[#3157d5] opacity-50"
+          onClick={onViewAll}
+          className="flex items-center gap-1 text-xs font-semibold text-[#3157d5] transition hover:underline"
         >
           View all results
           <ChevronRight size={14} />
@@ -243,7 +243,7 @@ function EmailResultsTable({
       </div>
 
       <div className="border-t border-[#e9ecf1] px-6 py-4 text-[11px] text-[#8a92a4]">
-        Showing {visibleEmails.length} of {emails.length} synthetic demo emails
+        Showing {visibleEmails.length} of {matchingEmails.length} matching emails ({emails.length} total)
       </div>
     </section>
   );
