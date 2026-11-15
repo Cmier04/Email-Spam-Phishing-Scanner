@@ -19,7 +19,7 @@ export const defaultSettings: SettingsPreferences = {
   retentionDays: "90",
 };
 
-const STORAGE_KEY = "inboxguard.settings.preview.v1";
+const STORAGE_KEY = "phishlabs.settings.preview.v1";
 
 export function loadSettings(): SettingsPreferences {
   if (typeof window === "undefined") {

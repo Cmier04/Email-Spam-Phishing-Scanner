@@ -21,6 +21,11 @@ import type { Email } from "./data/mockEmails";
 
 function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // Controls whether the desktop sidebar is expanded or icon-only.
+  const [sidebarCollapsed, setSidebarCollapsed] =
+    useState(false);
+
   const [activePage, setActivePage] =
     useState<AppPage>("dashboard");
   const [selectedEmail, setSelectedEmail] =
@@ -72,12 +77,25 @@ function App() {
     return () => controller.abort();
   }, [reloadCount]);
 
-  function navigate(page: AppPage) {
-    setActivePage(page);
-    setSelectedEmail(null);
-    setSidebarOpen(false);
-    window.scrollTo(0, 0);
+function navigate(page: AppPage) {
+  // Close the mobile navigation menu.
+  setSidebarOpen(false);
+
+  // Clicking the page you're already on toggles the sidebar.
+  if (page === activePage && selectedEmail === null) {
+    if (window.matchMedia("(min-width: 1024px)").matches) {
+      setSidebarCollapsed((collapsed) => !collapsed);
+    }
+
+    return;
   }
+
+  // Navigate to another page without changing
+  // whether the sidebar is collapsed or expanded.
+  setActivePage(page);
+  setSelectedEmail(null);
+  window.scrollTo(0, 0);
+}
 
   function openEmail(email: Email) {
     setSelectedEmail(email);
@@ -110,9 +128,17 @@ function App() {
         onClose={() => setSidebarOpen(false)}
         activePage={activePage}
         onNavigate={navigate}
+        collapsed={sidebarCollapsed}
       />
 
-      <main className="min-h-screen lg:ml-[248px]">
+      {/* Main content adjusts when the sidebar collapses. */}
+      <main
+        className={`min-h-screen transition-[margin-left] duration-300 ${
+          sidebarCollapsed
+            ? "lg:ml-[72px]"
+            : "lg:ml-[248px]"
+        }`}
+      >
         {selectedEmail ? (
           <EmailDetail
             email={selectedEmail}
