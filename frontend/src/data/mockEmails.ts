@@ -1,23 +1,24 @@
-
 export type Email = {
-  id: string; // Gmail/FastAPI IDs are strings, e.g. "gmail_001".
+  id: string;
+  source?: "demo" | "gmail";
   sender: string;
   email: string;
-  initials: string; // Display-only avatar initials.
+  initials: string;
   tone: "blue" | "red" | "violet" | "amber" | "slate";
   subject: string;
   preview: string;
-  time: string; // Temporary display label; derived from received_at later.
+  time: string;
   received_at?: string;
   classification: "Legitimate" | "Potential threat";
-  confidence: number; // 0-100.
+  confidence: number;
+  maliciousProbability?: number;
   risk: "Low" | "Medium" | "High";
   threat_category?: string;
   greeting?: string;
   body?: string;
   request?: string;
-  actionLabel?: string; // map FastAPI link_text here later.
-  link_text?: string; // Optional raw API name for transition.
+  actionLabel?: string;
+  link_text?: string;
   links?: { display_text: string; url: string }[];
   attachment?: string;
   signature?: string;
@@ -32,7 +33,8 @@ export const mockEmails: Email[] = [
     initials: "AS",
     tone: "red",
     subject: "Urgent: Your account will be suspended",
-    preview: "We detected unusual activity. Verify your identity immediately.",
+    preview:
+      "We detected unusual activity. Verify your identity immediately.",
     time: "9:18 AM",
     received_at: "2026-10-20T09:18:00Z",
     classification: "Potential threat",
@@ -55,11 +57,13 @@ export const mockEmails: Email[] = [
     indicators: [
       {
         title: "Suspicious sender",
-        description: "Example indicator: the domain may not match the claimed organization.",
+        description:
+          "Example indicator: the domain may not match the claimed organization.",
       },
       {
         title: "Urgent language",
-        description: "Example indicator: the message pressures the recipient to act quickly.",
+        description:
+          "Example indicator: the message pressures the recipient to act quickly.",
       },
     ],
   },
@@ -70,7 +74,8 @@ export const mockEmails: Email[] = [
     initials: "GC",
     tone: "blue",
     subject: "Reminder: Team sync in 10 minutes",
-    preview: "Your weekly team sync starts soon. Join using your calendar event.",
+    preview:
+      "Your weekly team sync starts soon. Join using your calendar event.",
     time: "10:42 AM",
     classification: "Legitimate",
     confidence: 98,
@@ -99,7 +104,8 @@ export const mockEmails: Email[] = [
     initials: "BS",
     tone: "amber",
     subject: "Invoice #8821 — payment failed",
-    preview: "Your recent payment was declined. Update your payment details.",
+    preview:
+      "Your recent payment was declined. Update your payment details.",
     time: "Yesterday",
     classification: "Potential threat",
     threat_category: "phishing",
@@ -107,7 +113,8 @@ export const mockEmails: Email[] = [
     risk: "Medium",
     greeting: "Dear customer,",
     body: "Your recent payment was declined.",
-    request: "Update your payment details to avoid account fees.",
+    request:
+      "Update your payment details to avoid account fees.",
     actionLabel: "Update payment details",
     attachment: "Invoice_8821.pdf",
     signature: "Customer Billing Department",
@@ -119,7 +126,8 @@ export const mockEmails: Email[] = [
     initials: "N",
     tone: "slate",
     subject: "Your workspace weekly digest",
-    preview: "Here is what your team has been working on this week.",
+    preview:
+      "Here is what your team has been working on this week.",
     time: "May 24",
     classification: "Legitimate",
     confidence: 97,

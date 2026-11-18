@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.classify import router as classify_router
+from app.api.demo import router as demo_router
 from app.api.gmail import router as gmail_router
 from app.api.learning_lab import router as learning_lab_router
 
@@ -49,5 +50,10 @@ app.include_router(
 
 app.include_router(
     learning_lab_router,
+    prefix="/api",
+)
+
+app.include_router(
+    demo_router,
     prefix="/api",
 )

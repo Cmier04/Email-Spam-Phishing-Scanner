@@ -7,6 +7,7 @@ from pydantic import ValidationError
 from app.api.learning_lab import what_if
 from app.models.schemas import WhatIfRequest
 from app.services.gmail_service import GmailMessageNotFoundError
+from app.services.gmail_service import GmailAPIError, GmailConfigurationError
 from app.services.learning_lab_service import LearningLabValidationError
 
 
@@ -77,6 +78,22 @@ class LearningLabAPITests(unittest.TestCase):
 
         self.assertEqual(raised.exception.status_code, 404)
         self.assertEqual(raised.exception.detail, "missing")
+
+    def test_backend_reports_gmail_configuration_and_upstream_errors_safely(self):
+        cases = [
+            (GmailConfigurationError("OAuth is not configured."), 503),
+            (GmailAPIError("private upstream detail"), 502),
+        ]
+
+        for error, expected_status in cases:
+            with self.subTest(error=type(error).__name__), patch(
+                "app.api.learning_lab.run_what_if_experiment",
+                side_effect=error,
+            ):
+                with self.assertRaises(HTTPException) as raised:
+                    what_if(valid_request())
+                self.assertEqual(raised.exception.status_code, expected_status)
+                self.assertNotIn("private upstream detail", raised.exception.detail)
 
 
 if __name__ == "__main__":

@@ -9,12 +9,29 @@ import {
   X,
 } from "lucide-react";
 
+export type AppPage = "dashboard" | "results" | "settings" | "help";
+
 type SidebarProps = {
   isOpen: boolean;
   onClose: () => void;
+  activePage: AppPage;
+  onNavigate: (page: AppPage) => void;
+  collapsed: boolean;
 };
 
-function Sidebar({ isOpen, onClose }: SidebarProps) {
+function Sidebar({
+  isOpen,
+  onClose,
+  activePage,
+  onNavigate,
+  collapsed,
+}: SidebarProps) {
+  const activeStyle =
+    "bg-[#eef2ff] text-[#3157d5]";
+
+  const inactiveStyle =
+    "text-[#687288] hover:bg-[#f5f7fb] hover:text-[#3157d5]";
+
   return (
     <>
       {isOpen && (
@@ -27,19 +44,33 @@ function Sidebar({ isOpen, onClose }: SidebarProps) {
       )}
 
       <aside
-        className={`fixed inset-y-0 left-0 z-50 flex w-[248px] flex-col border-r border-[#e4e8ef] bg-white px-4 py-6 transition-transform lg:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-50 flex w-[248px] flex-col overflow-y-auto border-r border-[#e4e8ef] bg-white px-4 py-6 transition-[transform,width,padding] duration-300 lg:translate-x-0 ${
           isOpen ? "translate-x-0" : "-translate-x-full"
+        } ${
+          collapsed
+            ? "lg:w-[72px] lg:px-2"
+            : "lg:w-[248px] lg:px-4"
         }`}
       >
         {/* Application logo */}
-        <div className="mb-9 flex items-center justify-between px-2">
+        <div
+          className={`mb-9 flex items-center justify-between px-2 ${
+            collapsed
+              ? "lg:justify-center lg:px-0"
+              : ""
+          }`}
+        >
           <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#3157d5] text-white">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#3157d5] text-white">
               <ShieldCheck size={20} />
             </div>
 
-            <span className="text-[17px] font-bold text-[#17213c]">
-              Project Name
+            <span
+              className={`text-[17px] font-bold text-[#17213c] ${
+                collapsed ? "lg:hidden" : ""
+              }`}
+            >
+              PhishLab
             </span>
           </div>
 
@@ -54,86 +85,195 @@ function Sidebar({ isOpen, onClose }: SidebarProps) {
         </div>
 
         {/* Main navigation */}
-        <nav className="space-y-1">
-          <a
-            href="/"
-            aria-current="page"
-            onClick={onClose}
-            className="flex items-center gap-3 rounded-lg bg-[#eef2ff] px-3 py-2.5 text-xs font-semibold text-[#3157d5]"
-          >
-            <LayoutDashboard size={18} />
-            <span>Dashboard</span>
-          </a>
-
+        <nav
+          aria-label="Main navigation"
+          className="space-y-1"
+        >
+          {/* Dashboard */}
           <button
             type="button"
-            disabled
-            title="Temp"
-            className="flex w-full cursor-not-allowed items-center gap-3 rounded-lg px-3 py-2.5 text-xs font-semibold text-[#687288] opacity-60"
+            onClick={() => onNavigate("dashboard")}
+            aria-current={
+              activePage === "dashboard"
+                ? "page"
+                : undefined
+            }
+            aria-label="Dashboard"
+            title={
+              collapsed
+                ? "Dashboard"
+                : undefined
+            }
+            className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-xs font-semibold transition ${
+              activePage === "dashboard"
+                ? activeStyle
+                : inactiveStyle
+            } ${
+              collapsed
+                ? "lg:justify-center lg:px-2"
+                : ""
+            }`}
           >
-            <Mail size={18} />
-            <span>Scan results</span>
+            <LayoutDashboard size={18} className="shrink-0" />
+
+            <span className={collapsed ? "lg:hidden" : ""}>
+              Dashboard
+            </span>
+          </button>
+
+          {/* Scan results */}
+          <button
+            type="button"
+            onClick={() => onNavigate("results")}
+            aria-current={
+              activePage === "results"
+                ? "page"
+                : undefined
+            }
+            aria-label="Scan results"
+            title={
+              collapsed
+                ? "Scan results"
+                : undefined
+            }
+            className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-xs font-semibold transition ${
+              activePage === "results"
+                ? activeStyle
+                : inactiveStyle
+            } ${
+              collapsed
+                ? "lg:justify-center lg:px-2"
+                : ""
+            }`}
+          >
+            <Mail size={18} className="shrink-0" />
+
+            <span className={collapsed ? "lg:hidden" : ""}>
+              Scan results
+            </span>
           </button>
         </nav>
 
         {/* Workspace navigation */}
-        <p className="mb-2 mt-8 px-3 text-[10px] font-bold uppercase tracking-[0.14em] text-[#a1a8b8]">
+        <p
+          className={`mb-2 mt-8 px-3 text-[10px] font-bold uppercase tracking-[0.14em] text-[#a1a8b8] ${
+            collapsed ? "lg:hidden" : ""
+          }`}
+        >
           Workspace
         </p>
 
-        <nav className="space-y-1">
+        <nav
+          aria-label="Workspace navigation"
+          className={`space-y-1 ${
+            collapsed
+              ? "lg:mt-6 lg:border-t lg:border-[#e4e8ef] lg:pt-4"
+              : ""
+          }`}
+        >
+          {/* Settings */}
           <button
             type="button"
-            disabled
-            title="Temp"
-            className="flex w-full cursor-not-allowed items-center gap-3 rounded-lg px-3 py-2.5 text-xs font-semibold text-[#687288] opacity-60"
+            onClick={() => onNavigate("settings")}
+            aria-current={
+              activePage === "settings"
+                ? "page"
+                : undefined
+            }
+            aria-label="Settings"
+            title={
+              collapsed
+                ? "Settings"
+                : undefined
+            }
+            className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-xs font-semibold transition ${
+              activePage === "settings"
+                ? activeStyle
+                : inactiveStyle
+            } ${
+              collapsed
+                ? "lg:justify-center lg:px-2"
+                : ""
+            }`}
           >
-            <Settings size={18} />
-            <span>Settings</span>
+            <Settings size={18} className="shrink-0" />
+
+            <span className={collapsed ? "lg:hidden" : ""}>
+              Settings
+            </span>
           </button>
 
+          {/* Help center */}
           <button
             type="button"
-            disabled
-            title="Temp"
-            className="flex w-full cursor-not-allowed items-center gap-3 rounded-lg px-3 py-2.5 text-xs font-semibold text-[#687288] opacity-60"
+            onClick={() => onNavigate("help")}
+            aria-current={
+              activePage === "help"
+                ? "page"
+                : undefined
+            }
+            aria-label="Help center"
+            title={
+              collapsed
+                ? "Help center"
+                : undefined
+            }
+            className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-xs font-semibold transition ${
+              activePage === "help"
+                ? activeStyle
+                : inactiveStyle
+            } ${
+              collapsed
+                ? "lg:justify-center lg:px-2"
+                : ""
+            }`}
           >
-            <CircleHelp size={18} />
-            <span>Help center</span>
+            <CircleHelp size={18} className="shrink-0" />
+
+            <span className={collapsed ? "lg:hidden" : ""}>
+              Help center
+            </span>
           </button>
         </nav>
 
-        {/* Connection status placeholder */}
-        <div className="mt-auto rounded-xl border border-[#e5e9f0] bg-[#f8f9fc] p-3.5">
-          <div className="flex items-center gap-2 text-xs font-semibold text-[#28334f]">
-            <span className="h-2 w-2 rounded-full bg-[#a1a8b8]" />
-            <span>Gmail not connected</span>
-          </div>
-
-          <p className="mt-2 text-[11px] text-[#788197]">
-            johndoe@gmail.com
-          </p>
-        </div>
-
         {/* Temporary user profile */}
-        <div className="mt-4 flex items-center gap-3 px-2">
-          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#dce5ff] text-xs font-bold text-[#3157d5]">
+        <div
+          className={`mt-auto flex items-center gap-3 px-2 ${
+            collapsed
+              ? "lg:justify-center lg:px-0"
+              : ""
+          }`}
+        >
+          <div
+            title={
+              collapsed
+                ? "John Doe — Prototype profile"
+                : undefined
+            }
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#dce5ff] text-xs font-bold text-[#3157d5]"
+          >
             JD
           </div>
 
-          <div className="min-w-0 flex-1">
+          <div
+            className={`min-w-0 flex-1 ${
+              collapsed ? "lg:hidden" : ""
+            }`}
+          >
             <p className="text-xs font-semibold text-[#26314c]">
               John Doe
             </p>
 
             <p className="text-[11px] text-[#8a92a4]">
-              Temp
+              Prototype profile
             </p>
           </div>
 
           <ChevronRight
             size={16}
-            className="text-[#949bad]"
+            className={`text-[#949bad] ${
+              collapsed ? "lg:hidden" : ""
+            }`}
           />
         </div>
       </aside>

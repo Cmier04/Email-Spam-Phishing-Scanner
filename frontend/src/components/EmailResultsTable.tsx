@@ -8,6 +8,7 @@ type EmailFilter = "All emails" | Email["classification"];
 type EmailResultsTableProps = {
   emails: Email[];
   onSelect: (email: Email) => void;
+  onViewAll: () => void;
 };
 
 const filters: EmailFilter[] = [
@@ -30,12 +31,12 @@ const riskStyles: Record<Email["risk"], string> = {
   High: "bg-[#ffebe7] text-[#b8493b]",
 };
 
-function EmailResultsTable({ emails, onSelect }: EmailResultsTableProps) {
+function EmailResultsTable({ emails, onSelect, onViewAll }: EmailResultsTableProps) {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<EmailFilter>("All emails");
 
   // Display only emails that match the selected filter and search.
-  const visibleEmails = emails.filter((email) => {
+  const matchingEmails = emails.filter((email) => {
     const matchesFilter =
       filter === "All emails" ||
       email.classification === filter;
@@ -50,6 +51,9 @@ function EmailResultsTable({ emails, onSelect }: EmailResultsTableProps) {
     return matchesFilter && matchesSearch;
   });
 
+  // Keep the dashboard a short preview; the full page handles all results.
+  const visibleEmails = matchingEmails.slice(0, 6);
+
   return (
     <section className="overflow-hidden rounded-2xl border border-[#e1e6ee] bg-white shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[#e7eaf0] px-5 py-5 md:px-6">
@@ -59,15 +63,14 @@ function EmailResultsTable({ emails, onSelect }: EmailResultsTableProps) {
           </h2>
 
           <p className="mt-1 text-xs text-[#8a92a4]">
-            Messages analyzed in your lastest scans
+            Synthetic emails evaluated by your local classifier
           </p>
         </div>
 
         <button
           type="button"
-          disabled
-          title="Full results page will be added later"
-          className="flex cursor-not-allowed items-center gap-1 text-xs font-semibold text-[#3157d5] opacity-50"
+          onClick={onViewAll}
+          className="flex items-center gap-1 text-xs font-semibold text-[#3157d5] transition hover:underline"
         >
           View all results
           <ChevronRight size={14} />
@@ -120,7 +123,7 @@ function EmailResultsTable({ emails, onSelect }: EmailResultsTableProps) {
               <th className="px-4 py-3">Subject</th>
               <th className="px-4 py-3">Classification</th>
               <th className="px-4 py-3">Confidence</th>
-              <th className="px-4 py-3">Risk</th>
+              <th className="px-4 py-3">Demo risk</th>
               <th className="px-4 py-3">Details</th>
             </tr>
           </thead>
@@ -134,7 +137,7 @@ function EmailResultsTable({ emails, onSelect }: EmailResultsTableProps) {
                 <tr
                   key={email.id}
                   onClick={() => onSelect(email)}
-                  className="border-b border-[#eef0f4] last:border-0"
+                  className="group cursor-pointer border-b border-[#eef0f4] transition-colors duration-150 hover:bg-[#f2f4f7] last:border-0"
                 >
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3">
@@ -148,6 +151,7 @@ function EmailResultsTable({ emails, onSelect }: EmailResultsTableProps) {
                         <p className="text-xs font-semibold text-[#2b354f]">
                           {email.sender}
                         </p>
+
                         <p className="mt-1 max-w-[170px] truncate text-[10px] text-[#939baa]">
                           {email.email}
                         </p>
@@ -159,6 +163,7 @@ function EmailResultsTable({ emails, onSelect }: EmailResultsTableProps) {
                     <p className="truncate text-xs font-medium text-[#3b465e]">
                       {email.subject}
                     </p>
+
                     <p className="mt-1 text-[10px] text-[#99a0af]">
                       {email.time}
                     </p>
@@ -213,12 +218,11 @@ function EmailResultsTable({ emails, onSelect }: EmailResultsTableProps) {
                         event.stopPropagation();
                         onSelect(email);
                       }}
-                      className="rounded-md p-1 text-[#abb1be] hover:bg-[#eef2ff] hover:text-[#3157d5] focus-visible:outline-2 focus-visible:outline-[#3157d5]"
+                      className="rounded-md p-1 text-[#abb1be] transition-all duration-150 group-hover:translate-x-0.5 group-hover:text-[#3157d5] hover:bg-[#e5e9f1] focus-visible:outline-2 focus-visible:outline-[#3157d5]"
                     >
                       <ChevronRight size={17} />
                     </button>
                   </td>
-                          
                 </tr>
               );
             })}
@@ -230,6 +234,7 @@ function EmailResultsTable({ emails, onSelect }: EmailResultsTableProps) {
             <p className="text-sm font-semibold text-[#4c566c]">
               No matching emails
             </p>
+
             <p className="mt-1 text-xs text-[#9198a8]">
               Try changing your search or filter.
             </p>
@@ -238,7 +243,7 @@ function EmailResultsTable({ emails, onSelect }: EmailResultsTableProps) {
       </div>
 
       <div className="border-t border-[#e9ecf1] px-6 py-4 text-[11px] text-[#8a92a4]">
-        Showing {visibleEmails.length} of {emails.length} mock emails
+        Showing {visibleEmails.length} of {matchingEmails.length} matching emails ({emails.length} total)
       </div>
     </section>
   );
