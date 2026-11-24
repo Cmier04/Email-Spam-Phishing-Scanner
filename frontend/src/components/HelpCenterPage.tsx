@@ -211,7 +211,7 @@ function HelpCenterPage({ onOpenMenu, onNavigate }: HelpCenterProps) {
 
   return (
     <>
-      <header className="flex min-h-[72px] items-center gap-3 border-b border-[#e4e8ef] bg-white px-5 md:px-8">
+      <header className="phishlab-topbar-enter flex min-h-[72px] items-center gap-3 border-b border-[#e4e8ef] bg-white px-5 md:px-8">
         <button
           type="button"
           onClick={onOpenMenu}
@@ -224,7 +224,7 @@ function HelpCenterPage({ onOpenMenu, onNavigate }: HelpCenterProps) {
         <h1 className="text-sm font-bold text-[#202a44]">Help center</h1>
       </header>
 
-      <div className="mx-auto max-w-[1100px] px-5 py-7 md:px-8 md:py-9">
+      <div className="phishlab-help-stagger mx-auto max-w-[1100px] px-5 py-7 md:px-8 md:py-9">
         <section className="relative overflow-hidden rounded-2xl bg-[#243b76] px-6 py-9 text-white md:px-9 md:py-11">
           <div aria-hidden="true" className="pointer-events-none absolute -right-16 -top-24 h-64 w-64 rounded-full bg-white/5" />
           <div aria-hidden="true" className="pointer-events-none absolute -bottom-28 right-36 h-56 w-56 rounded-full bg-white/5" />
@@ -266,7 +266,7 @@ function HelpCenterPage({ onOpenMenu, onNavigate }: HelpCenterProps) {
             <h3 id="quick-guides" className="text-base font-bold text-[#202a44]">Quick guides</h3>
             <p className="mt-1 text-xs text-[#8892a4]">Jump to a feature you want to explore.</p>
           </div>
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="phishlab-help-cards grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             {quickLinks.map(({ title, description, label, destination, icon: Icon, tone }) => (
               <button
                 key={title}
@@ -317,7 +317,7 @@ function HelpCenterPage({ onOpenMenu, onNavigate }: HelpCenterProps) {
             ))}
           </div>
 
-          <div className="overflow-hidden rounded-2xl border border-[#e1e6ee] bg-white shadow-sm">
+          <div className="phishlab-help-questions overflow-hidden rounded-2xl border border-[#e1e6ee] bg-white shadow-sm">
             {filteredQuestions.length === 0 ? (
               <div className="flex flex-col items-center px-5 py-12 text-center">
                 <CircleHelp size={28} className="text-[#9aa7bf]" />

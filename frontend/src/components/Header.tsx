@@ -65,7 +65,7 @@ function Header({
   }
 
   return (
-    <header className="flex min-h-[72px] items-center justify-between gap-3 border-b border-[#e4e8ef] bg-white px-5 py-3 md:px-8">
+    <header className="phishlab-topbar-enter flex min-h-[72px] items-center justify-between gap-3 border-b border-[#e4e8ef] bg-white px-5 py-3 md:px-8">
       <div className="flex items-center gap-3">
         {/* Mobile navigation */}
         <button

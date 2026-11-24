@@ -1,5 +1,6 @@
 
 import {
+  useCallback,
   useEffect,
   useRef,
   useState,
@@ -40,9 +41,12 @@ import {
 } from "../data/labTransformations";
 
 import WhatIfPanel from "./WhatIfPanel";
+import CrossfadeContent from "./CrossfadeContent";
+import "../animations.css";
 
 type LearningLabProps = {
   email: Email;
+  active?: boolean;
   onBack: () => void;
   onOpenMenu: () => void;
 };
@@ -172,6 +176,7 @@ const parts: EmailPart[] = [
   "formatting",
 ];
 
+// Email components that can change the subject/body input of the classifier.
 const textInputParts: EmailPart[] = [
   "subject",
   "greeting",
@@ -183,12 +188,14 @@ function SelectableField({
   label,
   selected,
   modified,
+  highlighted,
   onClick,
   children,
 }: {
   label: string;
   selected: boolean;
   modified: boolean;
+  highlighted: boolean;
   onClick: () => void;
   children: ReactNode;
 }) {
@@ -198,6 +205,8 @@ function SelectableField({
       onClick={onClick}
       aria-pressed={selected}
       className={`block w-full rounded-lg border px-3 py-2.5 text-left transition focus-visible:outline-2 focus-visible:outline-[#3157d5] ${
+        highlighted ? "lab-field-flash" : ""
+      } ${
         selected
           ? "border-[#8097df] bg-[#f2f5ff] shadow-sm"
           : "border-[#e5e9f0] bg-white hover:border-[#bdc9e7]"
@@ -209,21 +218,26 @@ function SelectableField({
         </span>
 
         {modified && (
-          <span className="rounded-full bg-[#eeeafe] px-2 py-0.5 text-[9px] font-bold text-[#6c56bd]">
+          <span className="lab-modified-badge rounded-full bg-[#eeeafe] px-2 py-0.5 text-[9px] font-bold text-[#6c56bd]">
             Modified
           </span>
         )}
       </span>
 
-      <span className="block whitespace-pre-line break-words text-sm leading-6 text-[#35415c]">
+      <CrossfadeContent
+        as="span"
+        changeKey={`${selected ? "selected" : "unselected"}:${String(children)}`}
+        className="block whitespace-pre-line break-words text-sm leading-6 text-[#35415c]"
+      >
         {children}
-      </span>
+      </CrossfadeContent>
     </button>
   );
 }
 
 function LearningLab({
   email,
+  active = true,
   onBack,
   onOpenMenu,
 }: LearningLabProps) {
@@ -247,6 +261,14 @@ function LearningLab({
   const [showLearningSummary, setShowLearningSummary] =
     useState(false);
 
+  // Visual feedback only; confirmed transformations stay controlled by FastAPI.
+  const [recentlyChangedPart, setRecentlyChangedPart] =
+    useState<EmailPart | null>(null);
+  const [undoingPart, setUndoingPart] =
+    useState<EmailPart | null>(null);
+  const [summaryClosing, setSummaryClosing] =
+    useState(false);
+
   const requestSequence = useRef(0);
   const inFlight = useRef<AbortController | null>(null);
   const scoreRequests = useRef<Map<string, AbortController>>(
@@ -257,6 +279,9 @@ function LearningLab({
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const finishButtonRef =
     useRef<HTMLButtonElement | null>(null);
+  const fieldFlashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const undoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const summaryCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Hover previews the destination section; clicking highlights it for one second.
   const [previewStage, setPreviewStage] =
@@ -273,6 +298,22 @@ function LearningLab({
     review: null,
   });
 
+  // A stable dismiss callback keeps the existing focus-trap effect mounted
+  // until the popup is actually closed, including during its exit animation.
+  const closeLearningSummary = useCallback(() => {
+    if (summaryCloseTimer.current !== null) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      setShowLearningSummary(false);
+      return;
+    }
+    setSummaryClosing(true);
+    summaryCloseTimer.current = setTimeout(() => {
+      setShowLearningSummary(false);
+      setSummaryClosing(false);
+      summaryCloseTimer.current = null;
+    }, 180);
+  }, []);
+
   useEffect(() => {
     const pendingScores = scoreRequests.current;
     return () => {
@@ -281,6 +322,9 @@ function LearningLab({
       if (highlightTimer.current !== null) {
         clearTimeout(highlightTimer.current);
       }
+      if (fieldFlashTimer.current !== null) clearTimeout(fieldFlashTimer.current);
+      if (undoTimer.current !== null) clearTimeout(undoTimer.current);
+      if (summaryCloseTimer.current !== null) clearTimeout(summaryCloseTimer.current);
     };
   }, []);
 
@@ -300,7 +344,7 @@ function LearningLab({
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
         event.preventDefault();
-        setShowLearningSummary(false);
+        closeLearningSummary();
         return;
       }
 
@@ -333,7 +377,7 @@ function LearningLab({
       document.removeEventListener("keydown", handleKeyDown);
       finishButtonRef.current?.focus();
     };
-  }, [showLearningSummary]);
+  }, [showLearningSummary, closeLearningSummary]);
 
   const appliedChanges = parts
     .map((part) => changes[part])
@@ -526,9 +570,20 @@ function LearningLab({
     }
   }
 
+  function flashChangedField(part?: EmailPart) {
+    if (!part) return;
+    if (fieldFlashTimer.current !== null) clearTimeout(fieldFlashTimer.current);
+    setRecentlyChangedPart(part);
+    fieldFlashTimer.current = setTimeout(() => {
+      setRecentlyChangedPart(null);
+      fieldFlashTimer.current = null;
+    }, 850);
+  }
+
   // Send the selected transformations to FastAPI.
   async function submitChanges(
-    nextChanges: Partial<Record<EmailPart, LabChange>>
+    nextChanges: Partial<Record<EmailPart, LabChange>>,
+    changedPart?: EmailPart
   ) {
     const requestId = ++requestSequence.current;
     inFlight.current?.abort();
@@ -548,6 +603,7 @@ function LearningLab({
       setExperimentError(null);
       setExperimentLoading(false);
       setShowLearningSummary(false);
+      flashChangedField(changedPart);
       return;
     }
 
@@ -593,6 +649,7 @@ function LearningLab({
       setChanges(nextChanges);
       setExperiment(result);
       setShowLearningSummary(false);
+      flashChangedField(changedPart);
       scoreChangesIndividually(nextApplied, result);
     } catch (error) {
       if (requestId !== requestSequence.current || controller.signal.aborted) return;
@@ -608,16 +665,41 @@ function LearningLab({
   }
 
   function applyChange(change: LabChange) {
-    void submitChanges({ ...changes, [change.part]: change });
+    if (undoingPart !== null) return;
+    setRecentlyChangedPart(null);
+    void submitChanges({ ...changes, [change.part]: change }, change.part);
   }
 
   function undoChange(part: EmailPart) {
+    if (experimentLoading || undoingPart !== null || !changes[part]) return;
     const updated = { ...changes };
     delete updated[part];
-    void submitChanges(updated);
+    setRecentlyChangedPart(null);
+
+    // Collapse the card first; retain confirmed data until FastAPI responds.
+    // If the request fails, the same card animates back into view.
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      void submitChanges(updated, part);
+      return;
+    }
+
+    setUndoingPart(part);
+    undoTimer.current = setTimeout(() => {
+      undoTimer.current = null;
+      void submitChanges(updated, part).finally(() => {
+        setUndoingPart(null);
+      });
+    }, 230);
   }
 
   function restoreAll() {
+    if (undoTimer.current !== null) {
+      clearTimeout(undoTimer.current);
+      undoTimer.current = null;
+    }
+    setUndoingPart(null);
+    setRecentlyChangedPart(null);
+    if (fieldFlashTimer.current !== null) clearTimeout(fieldFlashTimer.current);
     requestSequence.current += 1;
     inFlight.current?.abort();
     inFlight.current = null;
@@ -630,7 +712,7 @@ function LearningLab({
 
   return (
     <>
-      <header className="flex min-h-[72px] flex-wrap items-center justify-between gap-3 border-b border-[#e4e8ef] bg-white px-5 py-3 md:px-8">
+      <header className={`${active ? "phishlab-topbar-enter" : ""} flex min-h-[72px] flex-wrap items-center justify-between gap-3 border-b border-[#e4e8ef] bg-white px-5 py-3 md:px-8`}>
         <div className="flex items-center gap-3">
           <button
             type="button"
@@ -666,7 +748,10 @@ function LearningLab({
 
       <div className="mx-auto max-w-[1320px] px-5 py-7 md:px-8">
         {/* Page introduction; the stage buttons begin at Explore. */}
-        <div className="mb-5 px-2">
+        <div
+          className={`${active ? "phishlab-lab-enter" : ""} mb-5 px-2`}
+          style={{ animationDelay: "35ms" }}
+        >
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <div className="mb-2 flex items-center gap-2">
@@ -719,7 +804,8 @@ function LearningLab({
                   setSuppressedPreview(null);
                 }}
                 onClick={() => jumpToStage(step.stage)}
-                className={`group rounded-xl border px-4 py-3 text-left transition-[box-shadow,border-color,background-color,transform] duration-300 hover:-translate-y-0.5 hover:border-[#8097df] hover:bg-[#f0f4ff] hover:shadow-[0_0_20px_rgba(49,87,213,0.25)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#3157d5] ${
+                style={{ animationDelay: `${65 + index * 30}ms` }}
+                className={`${active ? "phishlab-lab-enter" : ""} group rounded-xl border px-4 py-3 text-left transition-[box-shadow,border-color,background-color,transform] duration-300 hover:-translate-y-0.5 hover:border-[#8097df] hover:bg-[#f0f4ff] hover:shadow-[0_0_20px_rgba(49,87,213,0.25)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#3157d5] ${
                   done
                     ? "border-[#dce3f5] bg-[#f2f5ff] text-[#3157d5]"
                     : "border-[#e1e6ee] bg-white text-[#768197]"
@@ -752,7 +838,8 @@ function LearningLab({
             ref={(node) => {
               stageRefs.current.explore = node;
             }}
-            className={`scroll-mt-6 overflow-hidden rounded-2xl border border-[#dfe4eb] bg-white shadow-sm transition-[box-shadow,border-color] duration-500 ${sectionGlow("explore")}`}
+            style={{ animationDelay: "150ms" }}
+            className={`${active ? "phishlab-lab-enter" : ""} scroll-mt-6 overflow-hidden rounded-2xl border border-[#dfe4eb] bg-white shadow-sm transition-[box-shadow,border-color] duration-500 ${sectionGlow("explore")}`}
           >
             <div className="flex items-center justify-between border-b border-[#e8ebf1] bg-[#fafbfc] px-5 py-4">
               <div>
@@ -770,25 +857,31 @@ function LearningLab({
             <div
               className={
                 spacing === "compact"
-                  ? "space-y-1 p-3 md:p-4"
+                  ? "phishlab-formatting-fields flex flex-col gap-1 p-3 md:p-4"
                   : spacing === "spacious"
-                    ? "space-y-6 p-8 md:p-10"
-                    : "space-y-3 p-5 md:p-6"
+                    ? "phishlab-formatting-fields flex flex-col gap-6 p-8 md:p-10"
+                    : "phishlab-formatting-fields flex flex-col gap-3 p-5 md:p-6"
               }
             >
-              {availableParts.map((part) => (
-                <SelectableField
+              {availableParts.map((part, index) => (
+                <div
                   key={part}
-                  label={partLabels[part]}
-                  selected={selectedPart === part}
-                  modified={Boolean(changes[part])}
-                  onClick={() => setSelectedPart(part)}
+                  className={active ? "phishlab-lab-enter" : ""}
+                  style={{ animationDelay: `${185 + index * 17}ms` }}
                 >
-                  {part === "formatting"
-                    ? `Current layout: ${spacing}`
-                    : experiment?.modified_values[toApiPart(part)] ??
-                      getOriginalPartValue(email, part)}
-                </SelectableField>
+                  <SelectableField
+                    label={partLabels[part]}
+                    selected={selectedPart === part}
+                    modified={Boolean(changes[part])}
+                    highlighted={recentlyChangedPart === part}
+                    onClick={() => setSelectedPart(part)}
+                  >
+                    {part === "formatting"
+                      ? `Current layout: ${spacing}`
+                      : experiment?.modified_values[toApiPart(part)] ??
+                        getOriginalPartValue(email, part)}
+                  </SelectableField>
+                </div>
               ))}
             </div>
           </section>
@@ -799,33 +892,37 @@ function LearningLab({
             ref={(node) => {
               stageRefs.current.investigate = node;
             }}
-            className={`scroll-mt-6 space-y-5 rounded-2xl border border-transparent transition-[box-shadow,border-color] duration-500 ${sectionGlow("investigate")}`}
+            style={{ animationDelay: "190ms" }}
+            className={`${active ? "phishlab-lab-enter phishlab-lab-investigate" : ""} scroll-mt-6 space-y-5 rounded-2xl border border-transparent transition-[box-shadow,border-color] duration-500 ${sectionGlow("investigate")}`}
           >
             <div className="rounded-2xl border border-[#e1e6ee] bg-white p-5 shadow-sm">
               <p className="text-[10px] font-bold uppercase tracking-wide text-[#6c56bd]">
                 Stage 2 · Investigate
               </p>
-              <h2 className="mt-1 text-sm font-bold text-[#202a44]">
-                {selectedContent.title}
-              </h2>
-              <div className="mt-4 space-y-4">
-                <Info
-                  title="What is this?"
-                  value={selectedContent.what}
-                />
+              {/* Keep the guidance height stable while the old and new text crossfade. */}
+              <div className="grid">
+                {/* Invisible copies reserve enough room for any available part.
+                    This prevents shorter/longer explanations from shifting Stage 2. */}
+                {availableParts.map((part) => (
+                  <div
+                    key={`guidance-size-${part}`}
+                    aria-hidden="true"
+                    className="invisible pointer-events-none col-start-1 row-start-1"
+                  >
+                    <GuidanceText part={part} />
+                  </div>
+                ))}
 
-                <Info
-                  title="What should I look for?"
-                  value={selectedContent.look}
-                />
-
-                <Info
-                  title="Why does it matter?"
-                  value={selectedContent.matter}
-                />
+                <CrossfadeContent
+                  changeKey={selectedPart}
+                  className="col-start-1 row-start-1"
+                >
+                  <GuidanceText part={selectedPart} />
+                </CrossfadeContent>
               </div>
             </div>
             <WhatIfPanel
+              active={active}
               title={selectedContent.title}
               originalValue={originalSelectedValue}
               modifiedValue={modifiedSelectedValue}
@@ -834,7 +931,7 @@ function LearningLab({
               onApply={applyChange}
               onReset={() => undoChange(selectedPart)}
               experiment={experiment}
-              loading={experimentLoading}
+              loading={experimentLoading || undoingPart !== null}
               error={experimentError}
             />
             <div className="flex gap-2 rounded-xl border border-[#e1e6ee] bg-white p-4">
@@ -855,7 +952,8 @@ function LearningLab({
           ref={(node) => {
             stageRefs.current.review = node;
           }}
-          className={`mt-5 scroll-mt-6 rounded-2xl border border-[#dce3f5] bg-[#f9faff] p-5 shadow-sm transition-[box-shadow,border-color] duration-500 md:p-6 ${sectionGlow("review")}`}
+          style={{ animationDelay: "315ms" }}
+          className={`${active ? "phishlab-lab-enter phishlab-lab-review" : ""} mt-5 scroll-mt-6 rounded-2xl border border-[#dce3f5] bg-[#f9faff] p-5 shadow-sm transition-[box-shadow,border-color] duration-500 md:p-6 ${sectionGlow("review")}`}
           aria-label="Experiment results"
         >
           <div className="mb-5">
@@ -882,8 +980,13 @@ function LearningLab({
               Changes Made
             </h3>
             <p className="mt-1 text-[11px] leading-5 text-[#8a92a4]">
-              {appliedChanges.length} currently applied · Score differences are in
-              percentage points (pp), measured individually against the original.
+              <CrossfadeContent
+                as="span"
+                changeKey={appliedChanges.length}
+              >
+                {appliedChanges.length} currently applied
+              </CrossfadeContent>
+              {" · Score differences are in percentage points (pp), measured individually against the original."}
             </p>
 
             {appliedChanges.length > 0 ? (
@@ -891,36 +994,52 @@ function LearningLab({
                 {appliedChanges.map((change) => {
                   const score = scoreLabel(change);
                   return (
-                    <button
+                    <div
                       key={change.part}
-                      type="button"
-                      disabled={experimentLoading}
-                      onClick={() => undoChange(change.part)}
-                      aria-label={`Undo ${partLabels[change.part]}: ${change.title}. ${score.value}`}
-                      title="Click anywhere to undo this change"
-                      className="group flex w-full items-center justify-between gap-4 rounded-lg border border-[#e5e9f0] bg-white px-4 py-3 text-left transition-colors duration-150 hover:border-[#cbd2dc] hover:bg-[#f1f3f6] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#3157d5] disabled:cursor-wait disabled:opacity-60"
+                      className={`lab-change-item ${
+                        undoingPart === change.part ? "lab-change-item-exit" : ""
+                      }`}
                     >
-                      <span className="min-w-0 flex-1">
-                        <span className="block text-xs font-semibold leading-5 text-[#35415c]">
-                          {partLabels[change.part]}: {change.title}
-                        </span>
-                        <span className="mt-0.5 block text-[10px] text-[#8a92a4]">
-                          {change.kind} · {change.scope}
-                        </span>
-                      </span>
-                      <span className="flex shrink-0 flex-col items-end gap-1">
-                        <span className="text-sm font-bold tabular-nums text-[#3157d5]">
-                          {score.value}
-                        </span>
-                        <span className="text-[10px] text-[#8a92a4]">
-                          {score.detail}
-                        </span>
-                        <span className="flex items-center gap-1 text-[11px] font-semibold text-[#3157d5] group-hover:underline">
-                          <RotateCcw size={12} aria-hidden="true" />
-                    Undo
-                        </span>
-                      </span>
-                    </button>
+                      <div className="lab-change-item-inner">
+                        <button
+                          type="button"
+                          disabled={experimentLoading || undoingPart !== null}
+                          onClick={() => undoChange(change.part)}
+                          aria-label={`Undo ${partLabels[change.part]}: ${change.title}. ${score.value}`}
+                          title="Click anywhere to undo this change"
+                          className="group flex w-full items-center justify-between gap-4 rounded-lg border border-[#e5e9f0] bg-white px-4 py-3 text-left transition-colors duration-150 hover:border-[#cbd2dc] hover:bg-[#f1f3f6] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#3157d5] disabled:cursor-wait disabled:opacity-60"
+                        >
+                          <span className="min-w-0 flex-1">
+                            <span className="block text-xs font-semibold leading-5 text-[#35415c]">
+                              {partLabels[change.part]}: {change.title}
+                            </span>
+                            <span className="mt-0.5 block text-[10px] text-[#8a92a4]">
+                              {change.kind} · {change.scope}
+                            </span>
+                          </span>
+                          <span className="flex shrink-0 flex-col items-end gap-1">
+                            <CrossfadeContent
+                              as="span"
+                              changeKey={score.value}
+                              className="block text-sm font-bold tabular-nums text-[#3157d5]"
+                            >
+                              {score.value}
+                            </CrossfadeContent>
+                            <CrossfadeContent
+                              as="span"
+                              changeKey={score.detail}
+                              className="block text-[10px] text-[#8a92a4]"
+                            >
+                              {score.detail}
+                            </CrossfadeContent>
+                            <span className="flex items-center gap-1 text-[11px] font-semibold text-[#3157d5] group-hover:underline">
+                              <RotateCcw size={12} aria-hidden="true" />
+                              Undo
+                            </span>
+                          </span>
+                        </button>
+                      </div>
+                    </div>
                   );
                 })}
               </div>
@@ -940,8 +1059,11 @@ function LearningLab({
               <button
                 ref={finishButtonRef}
                 type="button"
-                onClick={() => setShowLearningSummary(true)}
-                disabled={appliedChanges.length === 0 || experimentLoading}
+                onClick={() => {
+                  setSummaryClosing(false);
+                  setShowLearningSummary(true);
+                }}
+                disabled={appliedChanges.length === 0 || experimentLoading || undoingPart !== null}
                 aria-haspopup="dialog"
                 className="flex items-center gap-2 rounded-lg bg-[#3157d5] px-4 py-2.5 text-xs font-semibold text-white transition hover:bg-[#2749bb] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#3157d5] disabled:cursor-not-allowed disabled:opacity-50"
               >
@@ -959,8 +1081,10 @@ function LearningLab({
           <button
             type="button"
             aria-label="Dismiss learning summary"
-            onClick={() => setShowLearningSummary(false)}
-            className="absolute inset-0 cursor-default bg-[#17213c]/50 backdrop-blur-[6px]"
+            onClick={closeLearningSummary}
+            className={`lab-summary-backdrop absolute inset-0 cursor-default bg-[#17213c]/50 backdrop-blur-[6px] ${
+              summaryClosing ? "lab-summary-backdrop-exit" : ""
+            }`}
           />
 
           <div
@@ -971,7 +1095,9 @@ function LearningLab({
             aria-labelledby="lab-learning-summary-title"
             aria-describedby="lab-learning-summary-description"
             tabIndex={-1}
-            className="relative z-10 max-h-[85vh] w-full max-w-[680px] overflow-y-auto rounded-2xl border border-[#e1e6ee] bg-white p-5 shadow-2xl outline-none sm:p-7"
+            className={`lab-summary-dialog relative z-10 max-h-[85vh] w-full max-w-[680px] overflow-y-auto rounded-2xl border border-[#e1e6ee] bg-white p-5 shadow-2xl outline-none sm:p-7 ${
+              summaryClosing ? "lab-summary-dialog-exit" : ""
+            }`}
           >
             <div className="flex items-start justify-between gap-4">
               <div className="flex items-center gap-3">
@@ -998,7 +1124,7 @@ function LearningLab({
               </div>
               <button
                 type="button"
-                onClick={() => setShowLearningSummary(false)}
+                onClick={closeLearningSummary}
                 aria-label="Close learning summary"
                 className="rounded-lg p-2 text-[#7b8497] transition hover:bg-[#f2f4f8] hover:text-[#26314c] focus-visible:outline-2 focus-visible:outline-[#3157d5]"
               >
@@ -1079,7 +1205,7 @@ function LearningLab({
             <div className="mt-6 flex justify-end border-t border-[#edf0f4] pt-5">
               <button
                 type="button"
-                onClick={() => setShowLearningSummary(false)}
+                onClick={closeLearningSummary}
                 className="rounded-lg bg-[#3157d5] px-5 py-2.5 text-xs font-semibold text-white transition hover:bg-[#2749bb] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#3157d5]"
               >
                 Dismiss
@@ -1089,6 +1215,25 @@ function LearningLab({
         </div>
       )}
 
+    </>
+  );
+}
+
+// Reuse the exact guidance layout for both the visible crossfade and the
+// invisible height measurements, so the card never jumps between selections.
+function GuidanceText({ part }: { part: EmailPart }) {
+  const content = learningContent[part];
+
+  return (
+    <>
+      <h2 className="mt-1 text-sm font-bold text-[#202a44]">
+        {content.title}
+      </h2>
+      <div className="mt-4 space-y-4">
+        <Info title="What is this?" value={content.what} />
+        <Info title="What should I look for?" value={content.look} />
+        <Info title="Why does it matter?" value={content.matter} />
+      </div>
     </>
   );
 }

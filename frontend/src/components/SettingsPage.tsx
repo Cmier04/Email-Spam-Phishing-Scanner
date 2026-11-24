@@ -139,7 +139,7 @@ function SettingsPage({
   return (
     <>
       {/* Settings header */}
-      <header className="flex min-h-[72px] items-center gap-3 border-b border-[#e4e8ef] bg-white px-5 md:px-8">
+      <header className="phishlab-topbar-enter flex min-h-[72px] items-center gap-3 border-b border-[#e4e8ef] bg-white px-5 md:px-8">
         <button
           type="button"
           onClick={onOpenMenu}
@@ -156,7 +156,7 @@ function SettingsPage({
         </h1>
       </header>
 
-      <div className="mx-auto max-w-[920px] px-5 py-7 md:px-8 md:py-9">
+      <div className="phishlab-settings-stagger mx-auto max-w-[920px] px-5 py-7 md:px-8 md:py-9">
         {/* Page title */}
         <div className="mb-7">
           <h2 className="text-[26px] font-bold tracking-tight text-[#17213c]">
@@ -168,7 +168,7 @@ function SettingsPage({
           </p>
         </div>
 
-        <div className="space-y-5">
+        <div className="phishlab-settings-sections space-y-5">
           {/* Connected inbox */}
           <SettingsSection
             title="Connected inbox"
