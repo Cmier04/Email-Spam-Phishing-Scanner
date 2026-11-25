@@ -6,6 +6,7 @@ from dataclasses import dataclass
 
 from app.models.schemas import DemoEmailResponse
 from app.services.classifier_service import classify_email_detailed
+from app.services.email_analysis_service import analyze_email
 
 
 class DemoEmailNotFoundError(LookupError):
@@ -128,6 +129,13 @@ def list_demo_emails() -> list[DemoEmailResponse]:
                 action_label=email.action_label,
                 attachment=email.attachment,
                 signature=email.signature,
+                security_analysis=analyze_email({
+                    "sender_name": email.sender,
+                    "sender_address": email.sender_address,
+                    "subject": email.subject,
+                    "body": email.classifier_body,
+                    "attachments": [{"filename": email.attachment}] if email.attachment else [],
+                }),
             )
         )
     return responses

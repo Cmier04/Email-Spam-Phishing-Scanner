@@ -1,3 +1,19 @@
+export type EmailSecurityIndicator = {
+  code: string;
+  category: "language" | "identity" | "link" | "attachment";
+  severity: "caution" | "elevated";
+  title: string;
+  description: string;
+  evidence: string;
+  recommendation: string;
+};
+
+export type EmailSecurityAnalysis = {
+  indicators: EmailSecurityIndicator[];
+  recommendations: string[];
+  note: string;
+};
+
 export type Email = {
   id: string;
   source?: "demo" | "gmail";
@@ -23,6 +39,7 @@ export type Email = {
   attachment?: string;
   signature?: string;
   indicators?: { title: string; description: string }[];
+  securityAnalysis?: EmailSecurityAnalysis;
 };
 
 export const mockEmails: Email[] = [

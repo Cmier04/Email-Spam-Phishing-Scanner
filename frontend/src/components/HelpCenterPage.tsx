@@ -90,7 +90,7 @@ const questions: Question[] = [
     category: "Learning Lab",
     question: "How does the Learning Lab work?",
     answer:
-      "Select an example email, open Learning Lab, choose an editable part, and apply a supported transformation. The app sends an isolated modified copy to POST /api/what-if. FastAPI returns the model's original and modified predictions and malicious probabilities. Your original example remains unchanged.",
+      "Select an example email, open Learning Lab, choose an editable part, and apply a supported transformation. When enabled, local Qwen rewrites the subject, body, or identified request as an educational example; otherwise fixed replacements are used. The app sends an isolated modified copy to POST /api/what-if. FastAPI returns the model's original and modified predictions and malicious probabilities. Your original example remains unchanged.",
   },
   {
     id: "lab-scores",

@@ -29,6 +29,8 @@ import {
   type GmailConnectionStatus,
 } from "../api";
 
+import DebuggingSettings from "./DebuggingSettings";
+
 import {
   defaultSettings,
   loadSettings,
@@ -453,6 +455,8 @@ function SettingsPage({
               onToggle={() => toggle("weeklyDigest")}
             />
           </SettingsSection>
+
+          <DebuggingSettings />
 
           {/* Data and privacy */}
           <SettingsSection

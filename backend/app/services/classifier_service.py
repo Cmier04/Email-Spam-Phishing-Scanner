@@ -10,7 +10,10 @@ MODEL_PATH = (
     / "email_classifier.pkl"
 )
 
-model = joblib.load(MODEL_PATH)
+# Keep diagnostics and local settings available when the optional classifier
+# artifact was not included in a source-only archive. Classification still
+# requires the trained artifact and never substitutes a made-up prediction.
+model = joblib.load(MODEL_PATH) if MODEL_PATH.is_file() else None
 
 
 def _to_python_scalar(value: Any) -> Any:
@@ -25,6 +28,8 @@ def classify_email_detailed(subject: str, body: str) -> dict:
     up in ``classes_`` avoids assuming the malicious score is either the final
     probability or the maximum probability.
     """
+    if model is None:
+        raise FileNotFoundError("The trained email classifier is not installed at backend/model/email_classifier.pkl")
     text = f"{subject} {body}"
     prediction = model.predict([text])[0]
     probabilities = model.predict_proba([text])[0]

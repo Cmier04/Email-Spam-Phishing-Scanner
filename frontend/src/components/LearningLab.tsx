@@ -41,6 +41,7 @@ import {
 } from "../data/labTransformations";
 
 import WhatIfPanel from "./WhatIfPanel";
+import { FORCE_QWEN_CHANGED_EVENT, FORCE_QWEN_STORAGE_KEY, readForceQwenPreference } from "../data/forceQwenPreference";
 import CrossfadeContent from "./CrossfadeContent";
 import "../animations.css";
 
@@ -176,9 +177,6 @@ const parts: EmailPart[] = [
   "formatting",
 ];
 
-// Keep long message fragments readable without hiding their full contents.
-const FIELD_PREVIEW_LENGTH = 240;
-
 // Email components that can change the subject/body input of the classifier.
 const textInputParts: EmailPart[] = [
   "subject",
@@ -192,7 +190,6 @@ function SelectableField({
   selected,
   modified,
   highlighted,
-  expanded,
   onClick,
   children,
 }: {
@@ -200,24 +197,14 @@ function SelectableField({
   selected: boolean;
   modified: boolean;
   highlighted: boolean;
-  expanded: boolean;
   onClick: () => void;
   children: ReactNode;
 }) {
-  const text = String(children ?? "");
-  const characters = Array.from(text);
-  const isLong = characters.length > FIELD_PREVIEW_LENGTH;
-  const displayed = isLong && !expanded
-    ? `${characters.slice(0, FIELD_PREVIEW_LENGTH).join("").trimEnd()}…`
-    : text;
-
   return (
     <button
       type="button"
       onClick={onClick}
       aria-pressed={selected}
-      aria-expanded={isLong ? expanded : undefined}
-      title={isLong ? (expanded ? "Click again to collapse" : selected ? "Click again to expand" : "Select, then click again to expand") : undefined}
       className={`block w-full min-w-0 rounded-lg border px-3 py-2.5 text-left transition focus-visible:outline-2 focus-visible:outline-[#3157d5] ${
         highlighted ? "lab-field-flash" : ""
       } ${
@@ -240,16 +227,11 @@ function SelectableField({
 
       <CrossfadeContent
         as="span"
-        changeKey={`${selected ? "selected" : "unselected"}:${expanded ? "expanded" : "collapsed"}:${text}`}
-        className="block min-w-0 whitespace-pre-line break-words [overflow-wrap:anywhere] text-sm leading-6 text-[#35415c]"
+        changeKey={`${selected ? "selected" : "unselected"}:${String(children)}`}
+        className="block min-w-0 whitespace-pre-line [overflow-wrap:anywhere] text-sm leading-6 text-[#35415c]"
       >
-        {displayed}
+        {children}
       </CrossfadeContent>
-      {isLong && selected && (
-        <span className="mt-1 block text-[10px] font-medium text-[#3157d5]">
-          {expanded ? "Click again to collapse" : "Click again to expand"}
-        </span>
-      )}
     </button>
   );
 }
@@ -262,17 +244,6 @@ function LearningLab({
 }: LearningLabProps) {
   const [selectedPart, setSelectedPart] =
     useState<EmailPart>("subject");
-  // A selected field expands on its next click; clicking it again collapses it.
-  const [expandedPart, setExpandedPart] = useState<EmailPart | null>(null);
-
-  function handlePartClick(part: EmailPart) {
-    if (part !== selectedPart) {
-      setSelectedPart(part);
-      setExpandedPart(null);
-      return;
-    }
-    setExpandedPart((current) => current === part ? null : part);
-  }
 
   // Only confirmed changes are stored; the original email prop never changes.
   const [changes, setChanges] = useState<
@@ -284,6 +255,7 @@ function LearningLab({
     useState(false);
   const [experimentError, setExperimentError] =
     useState<string | null>(null);
+  const [forceQwen, setForceQwen] = useState<boolean>(readForceQwenPreference);
 
   const [isolatedEffects, setIsolatedEffects] =
     useState<Record<string, IsolatedEffect>>({});
@@ -583,7 +555,7 @@ function LearningLab({
       const controller = new AbortController();
       scoreRequests.current.set(change.id, controller);
       setScoringIds((previous) => [...previous, change.id]);
-      void runWhatIf(buildWhatIfRequest(email.id, [change]), controller.signal)
+      void runWhatIf({ ...buildWhatIfRequest(email.id, [change]), include_summary: false, ai_mode: forceQwen ? "require_qwen" : "automatic" }, controller.signal)
         .then((isolated) => {
           if (!controller.signal.aborted) recordIsolatedResult(change, isolated);
         })
@@ -599,6 +571,42 @@ function LearningLab({
         });
     }
   }
+
+  const changeForceQwen = useCallback((enabled: boolean) => {
+    // The mode affects generated text and independent scoring. Never keep
+    // previously measured scores after switching mode.
+    requestSequence.current += 1;
+    inFlight.current?.abort();
+    scoreRequests.current.forEach((controller) => controller.abort());
+    scoreRequests.current.clear();
+    effectsCache.current = {};
+    setIsolatedEffects({});
+    setScoringIds([]);
+    setChanges({});
+    setExperiment(null);
+    setExperimentError(null);
+    setExperimentLoading(false);
+    setShowLearningSummary(false);
+    setForceQwen(enabled);
+  }, []);
+
+  // Settings owns this preference; reset stale comparisons when it changes.
+  // The storage event also covers changes from another browser tab.
+  useEffect(() => {
+    const synchronize = () => {
+      const enabled = readForceQwenPreference();
+      if (enabled !== forceQwen) changeForceQwen(enabled);
+    };
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === FORCE_QWEN_STORAGE_KEY || event.key === null) synchronize();
+    };
+    window.addEventListener(FORCE_QWEN_CHANGED_EVENT, synchronize);
+    window.addEventListener("storage", onStorage);
+    return () => {
+      window.removeEventListener(FORCE_QWEN_CHANGED_EVENT, synchronize);
+      window.removeEventListener("storage", onStorage);
+    };
+  }, [forceQwen, changeForceQwen]);
 
   function flashChangedField(part?: EmailPart) {
     if (!part) return;
@@ -656,7 +664,7 @@ function LearningLab({
 
     try {
       const result = await runWhatIf(
-        buildWhatIfRequest(email.id, nextApplied),
+        { ...buildWhatIfRequest(email.id, nextApplied), ai_mode: forceQwen ? "require_qwen" : "automatic" },
         controller.signal,
       );
       if (requestId !== requestSequence.current || controller.signal.aborted) return;
@@ -861,7 +869,7 @@ function LearningLab({
           })}
         </nav>
 
-        <div className="grid gap-5 xl:grid-cols-[1.15fr_.85fr]">
+        <div className="grid min-w-0 gap-5 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
           {/* Stage 1: Explore the isolated email copy. */}
           <section
             id="lab-explore"
@@ -869,7 +877,7 @@ function LearningLab({
               stageRefs.current.explore = node;
             }}
             style={{ animationDelay: "150ms" }}
-            className={`${active ? "phishlab-lab-enter" : ""} scroll-mt-6 overflow-hidden rounded-2xl border border-[#dfe4eb] bg-white shadow-sm transition-[box-shadow,border-color] duration-500 ${sectionGlow("explore")}`}
+            className={`${active ? "phishlab-lab-enter" : ""} min-w-0 scroll-mt-6 overflow-hidden rounded-2xl border border-[#dfe4eb] bg-white shadow-sm transition-[box-shadow,border-color] duration-500 ${sectionGlow("explore")}`}
           >
             <div className="flex items-center justify-between border-b border-[#e8ebf1] bg-[#fafbfc] px-5 py-4">
               <div>
@@ -877,7 +885,7 @@ function LearningLab({
                   Stage 1 · Explore
                 </p>
                 <p className="mt-1 text-[11px] text-[#a0a7b5]">
-                  Choose a component; click it again to expand or collapse long text
+                  Choose an email component below
                 </p>
               </div>
               <span className="rounded-full bg-[#e9f7f0] px-2.5 py-1 text-[10px] font-bold text-[#277c58]">
@@ -904,8 +912,7 @@ function LearningLab({
                     selected={selectedPart === part}
                     modified={Boolean(changes[part])}
                     highlighted={recentlyChangedPart === part}
-                    expanded={expandedPart === part}
-                    onClick={() => handlePartClick(part)}
+                    onClick={() => setSelectedPart(part)}
                   >
                     {part === "formatting"
                       ? `Current layout: ${spacing}`
@@ -924,7 +931,7 @@ function LearningLab({
               stageRefs.current.investigate = node;
             }}
             style={{ animationDelay: "190ms" }}
-            className={`${active ? "phishlab-lab-enter phishlab-lab-investigate" : ""} scroll-mt-6 space-y-5 rounded-2xl border border-transparent transition-[box-shadow,border-color] duration-500 ${sectionGlow("investigate")}`}
+            className={`${active ? "phishlab-lab-enter phishlab-lab-investigate" : ""} min-w-0 scroll-mt-6 space-y-5 rounded-2xl border border-transparent transition-[box-shadow,border-color] duration-500 ${sectionGlow("investigate")}`}
           >
             <div className="rounded-2xl border border-[#e1e6ee] bg-white p-5 shadow-sm">
               <p className="text-[10px] font-bold uppercase tracking-wide text-[#6c56bd]">

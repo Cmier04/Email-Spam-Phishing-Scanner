@@ -59,7 +59,11 @@ function dateFields(value: string): { received_at?: string; time: string } {
 }
 
 export function mapGmailMessageToEmail(message: GmailMessageResponse): Email {
-  const sender = senderParts(message.sender);
+  const fallbackSender = senderParts(message.sender);
+  const sender = {
+    name: message.sender_name || fallbackSender.name,
+    address: message.sender_address || fallbackSender.address,
+  };
   const dates = dateFields(message.date);
   const threat = message.classification === "Potential threat";
   const previewSource = compactText(message.snippet || message.body);
@@ -83,6 +87,14 @@ export function mapGmailMessageToEmail(message: GmailMessageResponse): Email {
         : "Medium"
       : "Low",
     body: message.body,
+    // Optional fields preserve compatibility with older Gmail API responses.
+    greeting: message.greeting || undefined,
+    request: message.request || undefined,
+    link_text: message.link_text || undefined,
+    links: message.links || [],
+    attachment: message.attachment || message.attachments?.[0]?.filename || undefined,
+    signature: message.signature || undefined,
+    securityAnalysis: message.security_analysis,
   };
 }
 

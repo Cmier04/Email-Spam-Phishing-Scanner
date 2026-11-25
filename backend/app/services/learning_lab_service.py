@@ -1,9 +1,9 @@
-"""Safe, deterministic transformations for isolated Learning Lab copies."""
+"""Deterministic and optional local-AI rewrites for isolated Learning Lab copies."""
 
 from __future__ import annotations
 
 from copy import deepcopy
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from email.utils import parseaddr
 import re
 from typing import Callable
@@ -19,10 +19,22 @@ from app.services.demo_email_service import (
     is_demo_email_id,
 )
 from app.services.gmail_service import get_message_by_id, parse_message
+from app.services.learning_summary_service import build_dynamic_summary
+from app.services.local_ai_summary_service import enrich_learning_summary
+from app.services.local_ai_rewrite_service import generate_educational_rewrite
 
 
 class LearningLabValidationError(ValueError):
     """Raised for unsupported, mismatched, or conflicting transformations."""
+
+
+class QwenRequiredError(RuntimeError):
+    """Strict mode failed; never silently replace Qwen output with rules."""
+
+    def __init__(self, step: str, reason: str):
+        self.step = step
+        self.reason = reason
+        super().__init__(f"Qwen required for {step}, but it failed ({reason}). No fallback was used.")
 
 
 @dataclass(frozen=True)
@@ -37,6 +49,9 @@ class TransformationApplication:
     applied: bool
     message: str
     modified_value: str | None = None
+    generation_method: str = "deterministic"
+    fallback_reason: str | None = None
+    ai_duration_ms: float | None = None
 
 
 def _subject_format(email: dict) -> TransformationApplication:
@@ -86,8 +101,7 @@ def _replace_greeting(email: dict) -> TransformationApplication:
     )
 
 
-def _replace_request(email: dict) -> TransformationApplication:
-    body = email["body"]
+def _find_requested_sentence(body: str) -> re.Match | None:
     sentences = list(re.finditer(r"[^.!?\r\n]+(?:[.!?]+|$)", body))
     action_pattern = re.compile(
         r"\b(please|must|verify|update|click|open|review|confirm|send|pay|"
@@ -98,12 +112,17 @@ def _replace_request(email: dict) -> TransformationApplication:
         sentence for sentence in sentences
         if action_pattern.search(sentence.group())
     ]
-    if len(matches) != 1:
+    return matches[0] if len(matches) == 1 else None
+
+
+def _replace_request(email: dict) -> TransformationApplication:
+    body = email["body"]
+    sentence = _find_requested_sentence(body)
+    if sentence is None:
         return TransformationApplication(
             False,
             "A single unambiguous requested-action sentence could not be identified.",
         )
-    sentence = matches[0]
     replacement = (
         " If this activity was unexpected, review your account using the official "
         "service."
@@ -115,6 +134,69 @@ def _replace_request(email: dict) -> TransformationApplication:
         True,
         "One clearly identifiable requested-action sentence was replaced.",
         replacement.strip(),
+    )
+
+
+# Qwen rewrites only the allowlisted text transformations. All others remain
+# deterministic so changing display metadata never invokes a generative model.
+_AI_REWRITE_IDS = frozenset({"subject-wording", "body-rephrase", "request-rephrase"})
+
+
+def _apply_local_rewrite(
+    original: dict,
+    modified: dict,
+    transformation_id: str,
+    definition: TransformationDefinition,
+    *, require_qwen: bool = False,
+) -> TransformationApplication:
+    if transformation_id not in _AI_REWRITE_IDS:
+        return definition.apply(modified)
+
+    requested_sentence = None
+    if transformation_id == "request-rephrase":
+        requested_sentence = _find_requested_sentence(modified["body"])
+        if requested_sentence is None:
+            return definition.apply(modified)
+        source_text = requested_sentence.group().strip()
+    elif transformation_id == "subject-wording":
+        source_text = original["subject"]
+    else:
+        source_text = original["body"]
+
+    ai = generate_educational_rewrite(
+        transformation_id,
+        text=source_text,
+        subject_context=original["subject"] if transformation_id != "subject-wording" else "",
+    )
+    if ai.text is None:
+        if require_qwen:
+            raise QwenRequiredError(transformation_id, ai.fallback_reason or "generation_failed")
+        fallback = definition.apply(modified)
+        return replace(fallback, generation_method="fallback", fallback_reason=ai.fallback_reason)
+
+    if transformation_id == "subject-wording":
+        modified["subject"] = ai.text
+        return TransformationApplication(
+            True, "Qwen generated an email-specific, neutral subject example.",
+            ai.text, generation_method="local_ai", ai_duration_ms=ai.ai_duration_ms,
+        )
+    if transformation_id == "body-rephrase":
+        modified["body"] = ai.text
+        return TransformationApplication(
+            True, "Qwen generated a neutral educational rewrite of the email body.",
+            ai.text, generation_method="local_ai", ai_duration_ms=ai.ai_duration_ms,
+        )
+    # Preserve all other sentences when editing the identified action request.
+    assert requested_sentence is not None
+    body = modified["body"]
+    modified["body"] = (
+        body[:requested_sentence.start()]
+        + ai.text
+        + body[requested_sentence.end():]
+    )
+    return TransformationApplication(
+        True, "Qwen rewrote one requested-action sentence for independent verification.",
+        ai.text, generation_method="local_ai", ai_duration_ms=ai.ai_duration_ms,
     )
 
 
@@ -236,8 +318,11 @@ def _validate_and_order(
 def run_what_if_experiment(
     email_id: str,
     transformations: list[WhatIfTransformationRequest],
+    *, include_summary: bool = True, ai_mode: str = "automatic",
 ) -> WhatIfResponse:
     """Retrieve an email, transform a deep copy, and compare real inference."""
+    if ai_mode not in {"automatic", "require_qwen"}:
+        raise LearningLabValidationError("Unsupported ai_mode")
     ordered = _validate_and_order(transformations)
     if is_demo_email_id(email_id):
         source = "demo"
@@ -252,7 +337,10 @@ def run_what_if_experiment(
     modified_values: dict[str, str] = {}
     warnings: list[str] = []
     for transformation_id, definition in ordered:
-        application = definition.apply(modified)
+        application = _apply_local_rewrite(
+            original, modified, transformation_id, definition,
+            require_qwen=ai_mode == "require_qwen",
+        )
         affects_classifier = definition.affects_classifier and application.applied
         results.append(
             AppliedTransformation(
@@ -261,6 +349,9 @@ def run_what_if_experiment(
                 applied=application.applied,
                 affects_classifier=affects_classifier,
                 message=application.message,
+                generation_method=application.generation_method,
+                fallback_reason=application.fallback_reason,
+                ai_duration_ms=application.ai_duration_ms,
             )
         )
         if application.applied and application.modified_value is not None:
@@ -273,6 +364,11 @@ def run_what_if_experiment(
                 )
         if not application.applied:
             warnings.append(application.message)
+        elif application.generation_method == "fallback":
+            warnings.append(
+                f"{transformation_id} used its fixed fallback "
+                f"(local AI: {application.fallback_reason or 'unavailable'})."
+            )
         elif not definition.affects_classifier:
             warnings.append(
                 f"{application.message} This transformation does not change the subject/body "
@@ -280,8 +376,26 @@ def run_what_if_experiment(
             )
 
     modified_result = classify_email_detailed(modified["subject"], modified["body"])
+    learning_summary = None
+    if include_summary:
+        # Preserve verified explanation; optional local AI only
+        # adds educational wording and can never replace model predictions.
+        dynamic_summary = build_dynamic_summary(
+            applied=results,
+            original=original,
+            modified=modified,
+            original_probability=original_result["malicious_probability"],
+            modified_probability=modified_result["malicious_probability"],
+            decision_changed=(
+                original_result["classification"] != modified_result["classification"]
+            ),
+        )
+        learning_summary = enrich_learning_summary(dynamic_summary)
+        if ai_mode == "require_qwen" and learning_summary.source != "local_ai":
+            raise QwenRequiredError("learning explanation", learning_summary.fallback_reason or "generation_failed")
     return WhatIfResponse(
         email_id=email_id,
+        ai_mode=ai_mode,
         source=source,
         original_classification=original_result["classification"],
         original_confidence=original_result["confidence"],
@@ -302,4 +416,5 @@ def run_what_if_experiment(
         modified_body=modified["body"],
         modified_values=modified_values,
         warnings=warnings,
+        learning_summary=learning_summary,
     )

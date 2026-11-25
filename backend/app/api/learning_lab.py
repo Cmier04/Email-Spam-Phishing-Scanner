@@ -12,6 +12,7 @@ from app.services.gmail_service import (
 )
 from app.services.learning_lab_service import (
     LearningLabValidationError,
+    QwenRequiredError,
     run_what_if_experiment,
 )
 
@@ -19,10 +20,22 @@ from app.services.learning_lab_service import (
 router = APIRouter(tags=["learning-lab"])
 
 
+@router.get("/ai-status")
+def ai_status() -> dict:
+    from app.services.local_ai_summary_service import get_local_ai_status
+    return get_local_ai_status()
+
+
 @router.post("/what-if", response_model=WhatIfResponse)
 def what_if(request: WhatIfRequest) -> WhatIfResponse:
     try:
-        return run_what_if_experiment(request.email_id, request.transformations)
+        return run_what_if_experiment(
+            request.email_id, request.transformations,
+            include_summary=request.include_summary,
+            ai_mode=request.ai_mode,
+        )
+    except QwenRequiredError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     except LearningLabValidationError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except GmailMessageNotFoundError as exc:

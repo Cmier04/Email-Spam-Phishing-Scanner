@@ -118,7 +118,7 @@ class GmailMessageParsingTests(unittest.TestCase):
             },
         }
 
-        self.assertEqual(extract_body(payload), "Hello there .")
+        self.assertEqual(extract_body(payload), "Hello there.")
 
     def test_extract_body_ignores_named_attachments_in_multipart_mixed(self):
         payload = {
@@ -152,11 +152,21 @@ class GmailMessageParsingTests(unittest.TestCase):
                 "id": "message-1",
                 "thread_id": "",
                 "sender": "",
+                "sender_name": "",
+                "sender_address": "",
+                "reply_to": "",
                 "recipient": "",
                 "subject": "",
                 "date": "",
                 "snippet": "",
                 "body": "",
+                "greeting": "",
+                "request": "",
+                "links": [],
+                "link_text": "",
+                "attachments": [],
+                "attachment": "",
+                "signature": "",
             },
         )
 

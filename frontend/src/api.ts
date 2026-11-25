@@ -1,5 +1,5 @@
 
-import type { Email } from "./data/mockEmails";
+import type { Email, EmailSecurityAnalysis } from "./data/mockEmails";
 import type { WhatIfRequest } from "./data/labTransformations";
 import { mapGmailMessageToEmail } from "./data/emailPresentation";
 
@@ -27,17 +27,29 @@ type DemoEmailResponse = {
   action_label?: string | null;
   attachment?: string | null;
   signature?: string | null;
+  security_analysis?: EmailSecurityAnalysis;
 };
 
 export type GmailMessageResponse = {
   id: string;
   thread_id: string;
   sender: string;
+  sender_name?: string;
+  sender_address?: string;
+  reply_to?: string;
   recipient: string;
   subject: string;
   date: string;
   snippet: string;
   body: string;
+  greeting?: string;
+  request?: string;
+  link_text?: string;
+  links?: { display_text: string; url: string }[];
+  attachment?: string;
+  attachments?: { filename: string; mime_type: string; size: number }[];
+  signature?: string;
+  security_analysis?: EmailSecurityAnalysis;
   classification: "Legitimate" | "Potential threat";
   confidence: number;
 };
@@ -48,6 +60,9 @@ export type AppliedTransformation = {
   applied: boolean;
   affects_classifier: boolean;
   message: string;
+  generation_method?: "deterministic" | "local_ai" | "fallback";
+  ai_duration_ms?: number | null;
+  fallback_reason?: "disabled" | "local_model_unavailable" | "invalid_ai_response" | "generation_timeout" | "generation_failed" | null;
 };
 
 export type GmailConnectionStatus = {
@@ -64,7 +79,10 @@ export type GmailDisconnectResult = GmailConnectionStatus & {
 
 // All three fields can be generated in the backend without changing the classifier model.
 export type BackendLearningSummary = {
+  source?: "dynamic" | "local_ai";
+  fallback_reason?: "disabled" | "local_model_unavailable" | "invalid_ai_response" | "generation_timeout" | "generation_failed" | null;
   changes_made: string[];
+  ai_duration_ms?: number | null;
   why_it_mattered: string;
   what_you_should_learn: string;
 };
@@ -72,6 +90,7 @@ export type BackendLearningSummary = {
 // Matches the existing FastAPI response.
 export type WhatIfResponse = {
   email_id: string;
+  ai_mode?: "automatic" | "require_qwen";
   source: "gmail" | "demo";
   original_classification: string;
   original_confidence: number;
@@ -86,7 +105,7 @@ export type WhatIfResponse = {
   modified_body: string;
   modified_values: Record<string, string>;
   warnings: string[];
-  learning_summary?: BackendLearningSummary;
+  learning_summary?: BackendLearningSummary | null;
 };
 
 export class ApiError extends Error {
@@ -267,8 +286,26 @@ function isDemoEmail(value: unknown): value is DemoEmailResponse {
     ) &&
     typeof value.greeting === "string" &&
     typeof value.body === "string" &&
-    typeof value.request === "string"
+    typeof value.request === "string" &&
+    (value.security_analysis === undefined || isSecurityAnalysis(value.security_analysis))
   );
+}
+
+function isSecurityAnalysis(value: unknown): value is EmailSecurityAnalysis {
+  if (!isRecord(value)) return false;
+  if (!Array.isArray(value.indicators) || !Array.isArray(value.recommendations)) return false;
+  if (typeof value.note !== "string") return false;
+  return value.recommendations.every((item) => typeof item === "string") &&
+    value.indicators.every((item) =>
+      isRecord(item) &&
+      typeof item.code === "string" &&
+      (item.category === "language" || item.category === "identity" || item.category === "link" || item.category === "attachment") &&
+      (item.severity === "caution" || item.severity === "elevated") &&
+      typeof item.title === "string" &&
+      typeof item.description === "string" &&
+      typeof item.evidence === "string" &&
+      typeof item.recommendation === "string"
+    );
 }
 
 function isGmailMessage(value: unknown): value is GmailMessageResponse {
@@ -284,7 +321,8 @@ function isGmailMessage(value: unknown): value is GmailMessageResponse {
     typeof value.snippet === "string" &&
     typeof value.body === "string" &&
     isClassification(value.classification) &&
-    isProbability(value.confidence)
+    isProbability(value.confidence) &&
+    (value.security_analysis === undefined || isSecurityAnalysis(value.security_analysis))
   );
 }
 
@@ -313,6 +351,13 @@ function isLearningSummary(
   if (!isRecord(value)) return false;
 
   return (
+    (value.source === undefined || value.source === "dynamic" || value.source === "local_ai") &&
+    (value.fallback_reason === undefined || value.fallback_reason === null ||
+      value.fallback_reason === "disabled" ||
+      value.fallback_reason === "local_model_unavailable" ||
+      value.fallback_reason === "invalid_ai_response" ||
+      value.fallback_reason === "generation_timeout" ||
+      value.fallback_reason === "generation_failed") &&
     Array.isArray(value.changes_made) &&
     value.changes_made.every(
       (item) => typeof item === "string"
@@ -330,6 +375,7 @@ function isWhatIfResponse(value: unknown): value is WhatIfResponse {
   return (
     typeof value.email_id === "string" &&
     (value.source === "demo" || value.source === "gmail") &&
+    (value.ai_mode === undefined || value.ai_mode === "automatic" || value.ai_mode === "require_qwen") &&
     isClassification(value.original_classification) &&
     isClassification(value.modified_classification) &&
     isProbability(value.original_confidence) &&
@@ -351,6 +397,7 @@ function isWhatIfResponse(value: unknown): value is WhatIfResponse {
     ) &&
     (
       value.learning_summary === undefined ||
+      value.learning_summary === null ||
       isLearningSummary(value.learning_summary)
     ) &&
     Array.isArray(applications) &&
@@ -361,7 +408,11 @@ function isWhatIfResponse(value: unknown): value is WhatIfResponse {
         typeof item.transformation_id === "string" &&
         typeof item.applied === "boolean" &&
         typeof item.affects_classifier === "boolean" &&
-        typeof item.message === "string"
+        typeof item.message === "string" &&
+        (item.ai_duration_ms === undefined || item.ai_duration_ms === null || (typeof item.ai_duration_ms === "number" && item.ai_duration_ms >= 0)) &&
+        (item.generation_method === undefined || ["deterministic", "local_ai", "fallback"].includes(String(item.generation_method))) &&
+        (item.fallback_reason === undefined || item.fallback_reason === null ||
+          ["disabled", "local_model_unavailable", "invalid_ai_response", "generation_timeout", "generation_failed"].includes(String(item.fallback_reason)))
     )
   );
 }
@@ -411,6 +462,7 @@ export async function getDemoEmails(
     actionLabel: email.action_label ?? undefined,
     attachment: email.attachment ?? undefined,
     signature: email.signature ?? undefined,
+    securityAnalysis: email.security_analysis,
   }));
 }
 
@@ -438,4 +490,98 @@ export async function runWhatIf(
   }
 
   return payload;
+}
+
+
+export type LocalAIStatus = {
+  enabled: boolean;
+  model_file_available: boolean;
+  configured_for_gpu: boolean;
+  gpu_layers: number;
+  threads: number;
+  context_size: number;
+  batch_size: number;
+  generation_timeout_seconds: number;
+  model_filename: string;
+  note: string;
+};
+
+export async function getLocalAIStatus(signal?: AbortSignal): Promise<LocalAIStatus> {
+  const status = await requestJson("/api/ai-status", { signal });
+  if (!isRecord(status) || typeof status.enabled !== "boolean" ||
+      typeof status.model_file_available !== "boolean" ||
+      typeof status.configured_for_gpu !== "boolean" ||
+      typeof status.gpu_layers !== "number" ||
+      typeof status.threads !== "number" ||
+      typeof status.context_size !== "number" ||
+      typeof status.batch_size !== "number" ||
+      typeof status.generation_timeout_seconds !== "number" ||
+      typeof status.model_filename !== "string" ||
+      typeof status.note !== "string") {
+    throw new ApiError("The local AI status response is incompatible.", 200);
+  }
+  return status as LocalAIStatus;
+}
+
+// Configuration belongs to the machine hosting FastAPI; browser GPU detection
+// is deliberately not used because the browser may run on a different device.
+export type AIConfigValues = {
+  enabled: boolean;
+  gpu_layers: number;
+  threads: number;
+  context_size: number;
+  batch_size: number;
+  generation_timeout_seconds: number;
+};
+
+export type AISettingsResponse = AIConfigValues & {
+  mode: "auto" | "manual";
+  detected: {
+    profile: string;
+    device: string;
+    install_backend: string;
+    note: string;
+  };
+  detected_defaults: AIConfigValues;
+  environment_overrides: string[];
+};
+
+export type PythonTestEntry = {
+  id: string;
+  name: string;
+  functions: { id: string; name: string }[];
+};
+
+export type PythonTestResult = {
+  test_id: string;
+  status: "passed" | "failed" | "timeout";
+  output: string;
+  duration_ms: number;
+  truncated: boolean;
+};
+
+export function getAISettings(signal?: AbortSignal): Promise<AISettingsResponse> {
+  return requestJson("/api/debug/ai-settings", { signal }) as Promise<AISettingsResponse>;
+}
+
+export function setAISettings(
+  values: { mode: "auto" } | (AIConfigValues & { mode: "manual" })
+): Promise<AISettingsResponse> {
+  return requestJson("/api/debug/ai-settings", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json", "X-PhishLab-Local-Settings": "save" },
+    body: JSON.stringify(values),
+  }) as Promise<AISettingsResponse>;
+}
+
+export function getPythonTests(signal?: AbortSignal): Promise<{ enabled: boolean; tests: PythonTestEntry[] }> {
+  return requestJson("/api/debug/python-tests", { signal }) as Promise<{ enabled: boolean; tests: PythonTestEntry[] }>;
+}
+
+export function runPythonTest(testId: string): Promise<PythonTestResult> {
+  return requestJson("/api/debug/python-tests/run", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-PhishLab-Local-Tests": "run" },
+    body: JSON.stringify({ test_id: testId }),
+  }) as Promise<PythonTestResult>;
 }

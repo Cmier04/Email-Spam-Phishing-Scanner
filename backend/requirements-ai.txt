@@ -1,0 +1,4 @@
+# OPTIONAL local-only generative summary + educational rewrite runtime.
+# Install after backend/requirements.txt; never required for Gmail or classifier.
+# A native wheel/build toolchain appropriate for your OS may be necessary.
+llama-cpp-python>=0.3.9,<0.4

@@ -100,6 +100,9 @@ function WhatIfPanel({
   loading,
   error,
 }: WhatIfPanelProps) {
+  const selectedResult = experiment?.applied_transformations.find(
+    (item) => item.transformation_id === selected?.id,
+  );
   const heightRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
 
@@ -178,7 +181,7 @@ function WhatIfPanel({
 
       <div className="space-y-3 p-5">
         <p className="text-xs leading-5 text-[#7b8497]">
-          Apply a predefined transformation to this isolated email copy.
+          Try a change on a temporary copy. Neutral rewrites use local Qwen when available. You can require Qwen for AI rewrites under Settings → Debugging.
         </p>
         <CrossfadeContent changeKey={title} contentClassName="space-y-3">
         {options.map((option) => (
@@ -231,6 +234,15 @@ function WhatIfPanel({
         <p className="mt-1 text-[10px] text-[#8a92a4]">
           Select a card, then click it again to expand or collapse long text.
         </p>
+        {selectedResult?.applied && (
+          <p className="mt-2 text-[10px] font-semibold text-[#657087]" aria-live="polite">
+            Rewrite method: {selectedResult.generation_method === "local_ai"
+              ? "Local Qwen (educational example)"
+              : selectedResult.generation_method === "fallback"
+                ? "Fixed safe fallback"
+                : "Rule-based transformation"}
+          </p>
+        )}
         <CrossfadeContent
           changeKey={comparisonKey}
           className="mt-3"
@@ -285,7 +297,7 @@ function WhatIfPanel({
             <div className="mt-3" role="status">
               <p className="flex items-center gap-2 text-[10px] leading-5 text-[#657087]">
                 <LoaderCircle size={14} className="animate-spin motion-reduce:animate-none" />
-                Running the trained model...
+                Preparing the rewrite and running the trained classifier...
               </p>
               {/* Indeterminate activity, not a simulated probability. */}
               <div aria-hidden="true" className="mt-2 h-1 overflow-hidden rounded-full bg-[#e5e9f1]">
@@ -303,8 +315,28 @@ function WhatIfPanel({
               {experiment.warnings.map((warning) => <li key={warning}>{warning}</li>)}
             </ul>
           )}
+          {experiment && (
+            <details className="mt-3 border-t border-[#e8ebf1] pt-3 text-[10px] leading-5 text-[#657087]">
+              <summary className="cursor-pointer font-semibold text-[#35415c]">Generation details</summary>
+              <div className="mt-2 space-y-1">
+                <p>Mode used: {experiment.ai_mode === "require_qwen" ? "Qwen required" : "automatic"}</p>
+                {experiment.applied_transformations.map((change) => (
+                  <p key={change.transformation_id} className="break-words">
+                    {change.transformation_id}: {change.generation_method === "local_ai" ? "Qwen" : change.generation_method === "fallback" ? `fallback (${change.fallback_reason ?? "unknown"})` : "rule"}
+                    {change.ai_duration_ms != null ? ` · ${change.ai_duration_ms.toFixed(0)} ms` : ""}
+                  </p>
+                ))}
+                {experiment.learning_summary && (
+                  <p>Explanation: {experiment.learning_summary.source === "local_ai" ? "Qwen" : `dynamic fallback (${experiment.learning_summary.fallback_reason ?? "unknown"})`}
+                    {experiment.learning_summary.ai_duration_ms != null ? ` · ${experiment.learning_summary.ai_duration_ms.toFixed(0)} ms` : ""}
+                  </p>
+                )}
+              </div>
+            </details>
+          )}
         </div>
       </div>
+
         </div>
       </div>
     </section>

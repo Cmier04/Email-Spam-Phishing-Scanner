@@ -60,7 +60,7 @@ export function getOriginalPartValue(
     case "subject":
       return email.subject;
     case "greeting":
-      return email.greeting ?? "Hello,";
+      return email.greeting ?? "";
     case "body":
       return email.body ?? email.preview;
     case "request":
@@ -135,7 +135,7 @@ export function getLabOptions(
         add(
           "subject-wording",
           "Use neutral subject wording",
-          "Remove urgency from the subject line.",
+          "Create a subject specific to this email without pressure. Local Qwen is used when enabled; otherwise fixed safe wording is used.",
           "A note about your account",
           "Meaning-changing",
           "Message text"
@@ -159,7 +159,7 @@ export function getLabOptions(
         add(
           "body-rephrase",
           "Rephrase the body",
-          "Replace the body with a less urgent account message.",
+          "Create a calmer educational rewrite based on this email. Uses local Qwen when enabled or a fixed safe alternative.",
           "We noticed a recent change associated with your account. Review your account through the service you normally use.",
           "Meaning-changing",
           "Message text"
@@ -171,7 +171,7 @@ export function getLabOptions(
         add(
           "request-rephrase",
           "Remove the immediate deadline",
-          "Recommend opening the official service independently.",
+          "Replace one identifiable pressure/request sentence with independent-verification advice. Uses local Qwen when enabled.",
           "If this activity was unexpected, review your account using the official service.",
           "Meaning-changing",
           "Message text"
@@ -237,6 +237,8 @@ export function getLabOptions(
 }
 
 export type WhatIfRequest = {
+  include_summary?: boolean;
+  ai_mode?: "automatic" | "require_qwen";
   email_id: string;
   transformations: {
     part: string;

@@ -37,6 +37,7 @@ function EmailDetail({
   const [labActive, setLabActive] = useState(false);
   const isThreat = 
     email.classification === "Potential threat";
+  const securityAnalysis = email.securityAnalysis;
 
   // Keep both views mounted so What-If changes survive tab switches.
   return (
@@ -185,7 +186,7 @@ function EmailDetail({
 
                 <div>
                   <p className="text-xs text-[#7b8497]">
-                    Demo scan result
+                    {email.source === "gmail" ? "Gmail scan result" : "Demo scan result"}
                   </p>
 
                   <p className="font-bold text-[#202a44]">
@@ -221,29 +222,70 @@ function EmailDetail({
               </div>
             </section>
 
-            {/* Educational guidance (or preset recommendations), not verified findings */}
+            {/* Observed evidence is independent from classifier probability. */}
             <section className="rounded-2xl border border-[#e3e7ee] bg-white p-6 shadow-sm">
-              <h2 className="mb-4 text-sm font-bold text-[#202a44]">
+              <h2 className="mb-2 text-sm font-bold text-[#202a44]">
                 What to review
               </h2>
 
-              <div className="space-y-5">
-                <ReviewItem
-                  title="Sender identity"
-                  description="Compare the sender's email address with the organization they claim to represent."
-                />
+              {securityAnalysis ? (
+                <>
+                  <p className="mb-4 text-xs leading-5 text-[#7b8497]">
+                    Observations from this email, not an explanation of the model score.
+                  </p>
+                  {securityAnalysis.indicators.length > 0 ? (
+                    <div className="space-y-5">
+                      {securityAnalysis.indicators.map((indicator) => (
+                        <ReviewItem
+                          key={indicator.code}
+                          title={indicator.title}
+                          description={indicator.description}
+                          evidence={indicator.evidence}
+                        />
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs leading-5 text-[#657087]">
+                      No specific warning signs matched these checks. This does not mean the message is safe.
+                    </p>
+                  )}
 
-                <ReviewItem
-                  title="Message wording"
-                  description="Look for urgent deadlines, unusual payments, or requests for sensitive information."
-                />
+                  {securityAnalysis.recommendations.length > 0 && (
+                    <div className="mt-5 border-t border-[#e8ebf1] pt-4">
+                      <h3 className="mb-2 text-xs font-semibold text-[#35415c]">
+                        Suggested next steps
+                      </h3>
+                      <ul className="list-disc space-y-2 pl-4 text-xs leading-5 text-[#657087]">
+                        {securityAnalysis.recommendations.map((recommendation) => (
+                          <li key={recommendation} className="[overflow-wrap:anywhere]">
+                            {recommendation}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
 
-                <ReviewItem
-                  title="Links and attachments"
-                  description="Avoid opening unexpected links or files before independently verifying the message."
-                />
-              </div>
-
+                  <p className="mt-4 border-t border-[#edf0f4] pt-3 text-[11px] leading-5 text-[#8b94a5]">
+                    {securityAnalysis.note}
+                  </p>
+                </>
+              ) : (
+                <div className="space-y-5">
+                  {/* Preserve existing guidance for training demos and older APIs. */}
+                  <ReviewItem
+                    title="Sender identity"
+                    description="Compare the sender's email address with the organization they claim to represent."
+                  />
+                  <ReviewItem
+                    title="Message wording"
+                    description="Look for urgent deadlines, unusual payments, or requests for sensitive information."
+                  />
+                  <ReviewItem
+                    title="Links and attachments"
+                    description="Avoid opening unexpected links or files before independently verifying the message."
+                  />
+                </div>
+              )}
             </section>
 
             {/* Open the Learning Lab for the selected email. */}
@@ -307,9 +349,11 @@ function EmailDetail({
 function ReviewItem({
   title,
   description,
+  evidence,
 }: {
   title: string;
   description: string;
+  evidence?: string;
 }) {
   return (
     <div className="flex items-start gap-3">
@@ -326,6 +370,11 @@ function ReviewItem({
         <p className="mt-1 text-xs leading-5 text-[#7b8497]">
           {description}
         </p>
+        {evidence && (
+          <p className="mt-2 [overflow-wrap:anywhere] rounded-md bg-[#f4f6fa] px-2 py-1.5 text-[11px] leading-5 text-[#596579]">
+            Observed: {evidence}
+          </p>
+        )}
       </div>
     </div>
   );

@@ -18,15 +18,53 @@ class EmailClassificationResponse(BaseModel):
     confidence: float
 
 
+class GmailLink(BaseModel):
+    display_text: str
+    url: str
+
+
+class GmailAttachment(BaseModel):
+    filename: str
+    mime_type: str
+    size: int = Field(ge=0)
+
+
+class EmailSecurityIndicator(BaseModel):
+    code: str
+    category: Literal["language", "identity", "link", "attachment"]
+    severity: Literal["caution", "elevated"]
+    title: str
+    description: str
+    evidence: str
+    recommendation: str
+
+
+class EmailSecurityAnalysis(BaseModel):
+    indicators: list[EmailSecurityIndicator] = Field(default_factory=list)
+    recommendations: list[str] = Field(default_factory=list)
+    note: str = ""
+
+
 class GmailMessageResponse(EmailClassificationResponse):
     id: str
     thread_id: str
     sender: str
+    sender_name: str = ""
+    sender_address: str = ""
+    reply_to: str = ""
     recipient: str
     subject: str
     date: str
     snippet: str
     body: str
+    greeting: str = ""
+    request: str = ""
+    link_text: str = ""
+    links: list[GmailLink] = Field(default_factory=list)
+    attachment: str = ""
+    attachments: list[GmailAttachment] = Field(default_factory=list)
+    signature: str = ""
+    security_analysis: EmailSecurityAnalysis = Field(default_factory=EmailSecurityAnalysis)
 
 
 class GmailConnectionResponse(BaseModel):
@@ -58,6 +96,7 @@ class DemoEmailResponse(EmailClassificationResponse):
     action_label: str | None = None
     attachment: str | None = None
     signature: str | None = None
+    security_analysis: EmailSecurityAnalysis = Field(default_factory=EmailSecurityAnalysis)
 
 
 class WhatIfTransformationRequest(BaseModel):
@@ -76,6 +115,8 @@ class WhatIfTransformationRequest(BaseModel):
 class WhatIfRequest(BaseModel):
     email_id: str
     transformations: list[WhatIfTransformationRequest] = Field(min_length=1)
+    include_summary: bool = True
+    ai_mode: Literal["automatic", "require_qwen"] = "automatic"
 
     @field_validator("email_id")
     @classmethod
@@ -92,10 +133,30 @@ class AppliedTransformation(BaseModel):
     applied: bool
     affects_classifier: bool
     message: str
+    generation_method: Literal["deterministic", "local_ai", "fallback"] = "deterministic"
+    fallback_reason: Literal[
+        "disabled", "local_model_unavailable", "invalid_ai_response",
+        "generation_timeout", "generation_failed"
+    ] | None = None
+    ai_duration_ms: float | None = Field(default=None, ge=0)
+
+
+class LearningSummary(BaseModel):
+    # Explains what was observed, not the internal reasoning of the classifier.
+    source: Literal["dynamic", "local_ai"]
+    changes_made: list[str]
+    why_it_mattered: str
+    what_you_should_learn: str
+    fallback_reason: Literal[
+        "disabled", "local_model_unavailable", "invalid_ai_response",
+        "generation_timeout", "generation_failed"
+    ] | None = None
+    ai_duration_ms: float | None = Field(default=None, ge=0)
 
 
 class WhatIfResponse(BaseModel):
     email_id: str
+    ai_mode: Literal["automatic", "require_qwen"] = "automatic"
     source: Literal["gmail", "demo"]
     original_classification: str
     original_confidence: float = Field(ge=0, le=100)
@@ -110,3 +171,4 @@ class WhatIfResponse(BaseModel):
     modified_body: str
     modified_values: dict[str, str]
     warnings: list[str]
+    learning_summary: LearningSummary | None = None
