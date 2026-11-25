@@ -29,6 +29,18 @@ class GmailMessageResponse(EmailClassificationResponse):
     body: str
 
 
+class GmailConnectionResponse(BaseModel):
+    state: Literal["disconnected", "connecting", "connected", "failed", "cancelled"]
+    connected: bool
+    email: str | None = None
+    error: str | None = None
+    credentials_configured: bool
+
+
+class GmailDisconnectResponse(GmailConnectionResponse):
+    google_permission_revoked: Literal[False] = False
+
+
 class DemoEmailResponse(EmailClassificationResponse):
     id: str
     source: Literal["demo"]

@@ -14,6 +14,9 @@ class ExistingAPIRegressionTests(unittest.TestCase):
         self.assertIn("post", paths["/api/classify"])
         self.assertIn("get", paths["/api/gmail/latest"])
         self.assertIn("get", paths["/api/gmail/recent"])
+        self.assertIn("get", paths["/api/gmail/status"])
+        self.assertIn("post", paths["/api/gmail/connect"])
+        self.assertIn("post", paths["/api/gmail/disconnect"])
         self.assertIn("post", paths["/api/what-if"])
         self.assertIn("get", paths["/api/demo/emails"])
 

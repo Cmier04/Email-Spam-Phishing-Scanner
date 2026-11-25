@@ -1,5 +1,6 @@
 
 import {
+  useEffect,
   useState,
   type ChangeEvent,
   type ReactNode,
@@ -19,6 +20,13 @@ import {
   Trash2,
   type LucideIcon,
 } from "lucide-react";
+
+import {
+  connectGmail,
+  disconnectGmail,
+  getGmailStatus,
+  type GmailConnectionStatus,
+} from "../api";
 
 import {
   defaultSettings,
@@ -117,6 +125,81 @@ function SettingsPage({
   // Preferences are saved locally, not to FastAPI.
   const [preferences, setPreferences] =
     useState<SettingsPreferences>(loadSettings);
+  const [gmailStatus, setGmailStatus] =
+    useState<GmailConnectionStatus | null>(null);
+  const [gmailActionPending, setGmailActionPending] = useState(false);
+  const [gmailUiError, setGmailUiError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    getGmailStatus(controller.signal)
+      .then((status) => {
+        if (!controller.signal.aborted) setGmailStatus(status);
+      })
+      .catch((error: unknown) => {
+        if (!controller.signal.aborted) {
+          setGmailUiError(
+            error instanceof Error
+              ? error.message
+              : "Could not check the Gmail connection."
+          );
+        }
+      });
+
+    return () => controller.abort();
+  }, []);
+
+  useEffect(() => {
+    if (gmailStatus?.state !== "connecting") return;
+
+    const controller = new AbortController();
+    const poll = window.setInterval(() => {
+      getGmailStatus(controller.signal)
+        .then((status) => {
+          if (!controller.signal.aborted) {
+            setGmailStatus(status);
+            if (status.state !== "connecting") {
+              setGmailActionPending(false);
+            }
+          }
+        })
+        .catch((error: unknown) => {
+          if (!controller.signal.aborted) {
+            setGmailActionPending(false);
+            setGmailUiError(
+              error instanceof Error
+                ? error.message
+                : "Could not check Gmail authorization."
+            );
+          }
+        });
+    }, 1000);
+
+    return () => {
+      controller.abort();
+      window.clearInterval(poll);
+    };
+  }, [gmailStatus?.state]);
+
+  async function handleGmailAction() {
+    setGmailActionPending(true);
+    setGmailUiError(null);
+    try {
+      const status = gmailStatus?.connected || gmailStatus?.state === "connecting"
+        ? await disconnectGmail()
+        : await connectGmail();
+      setGmailStatus(status);
+    } catch (error) {
+      setGmailUiError(
+        error instanceof Error
+          ? error.message
+          : "The Gmail account action failed."
+      );
+    } finally {
+      setGmailActionPending(false);
+    }
+  }
 
   function updatePreferences(next: SettingsPreferences) {
     setPreferences(next);
@@ -186,24 +269,70 @@ function SettingsPage({
                       Gmail
                     </p>
 
-                    <span className="rounded-full bg-[#edf0f4] px-2 py-1 text-[10px] font-semibold text-[#677287]">
-                      Not connected
+                    <span
+                      className={`rounded-full px-2 py-1 text-[10px] font-semibold ${
+                        gmailStatus?.connected
+                          ? "bg-[#e6f5ed] text-[#277c58]"
+                          : gmailStatus?.state === "connecting"
+                            ? "bg-[#fff5db] text-[#9a6a16]"
+                            : gmailStatus?.state === "failed"
+                              ? "bg-[#fff0ed] text-[#b84b3e]"
+                              : "bg-[#edf0f4] text-[#677287]"
+                      }`}
+                    >
+                      {gmailStatus?.connected
+                        ? "Connected"
+                        : gmailStatus?.state === "connecting"
+                          ? "Connecting"
+                          : gmailStatus?.state === "failed"
+                            ? "Connection failed"
+                            : "Not connected"}
                     </span>
                   </div>
 
                   <p className="mt-1 text-[11px] text-[#8a92a4]">
-                    Gmail sign-in and syncing require backend integration.
+                    {gmailStatus?.connected
+                      ? gmailStatus.email ?? "Connected Gmail account"
+                      : gmailStatus?.state === "connecting"
+                        ? "Complete authorization in the browser window."
+                        : gmailStatus?.state === "cancelled"
+                          ? "Gmail connection was cancelled."
+                          : gmailStatus === null && !gmailUiError
+                            ? "Checking Gmail connection..."
+                            : "Connect Gmail with read-only inbox access."}
                   </p>
+
+                  {(gmailUiError || gmailStatus?.error) && (
+                    <p role="alert" className="mt-1 text-[11px] text-[#c03939]">
+                      {gmailUiError ?? gmailStatus?.error}
+                    </p>
+                  )}
+
+                  {gmailStatus && !gmailStatus.credentials_configured && (
+                    <p className="mt-1 text-[11px] text-[#9a6a16]">
+                      Gmail OAuth credentials are not configured in the backend.
+                    </p>
+                  )}
                 </div>
               </div>
 
               <button
                 type="button"
-                disabled
-                title="Available after Gmail authentication is implemented"
-                className="cursor-not-allowed rounded-lg border border-[#dfe4eb] bg-[#f7f8fa] px-3.5 py-2 text-[11px] font-semibold text-[#9aa2b0]"
+                onClick={handleGmailAction}
+                disabled={gmailActionPending || gmailStatus === null}
+                className={`rounded-lg border px-3.5 py-2 text-[11px] font-semibold transition disabled:cursor-not-allowed disabled:opacity-60 ${
+                  gmailStatus?.connected || gmailStatus?.state === "connecting"
+                    ? "border-[#f0d0ca] bg-[#fff8f7] text-[#b84b3e] hover:bg-[#fff0ed]"
+                    : "border-[#d9e1f2] bg-[#3157d5] text-white hover:bg-[#294bc0]"
+                }`}
               >
-                Connect Gmail
+                {gmailActionPending
+                  ? "Please wait..."
+                  : gmailStatus?.state === "connecting"
+                    ? "Cancel connection"
+                    : gmailStatus?.connected
+                      ? "Disconnect Gmail"
+                      : "Connect Gmail"}
               </button>
             </div>
           </SettingsSection>

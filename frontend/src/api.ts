@@ -36,6 +36,18 @@ export type AppliedTransformation = {
   message: string;
 };
 
+export type GmailConnectionStatus = {
+  state: "disconnected" | "connecting" | "connected" | "failed" | "cancelled";
+  connected: boolean;
+  email: string | null;
+  error: string | null;
+  credentials_configured: boolean;
+};
+
+export type GmailDisconnectResult = GmailConnectionStatus & {
+  google_permission_revoked: false;
+};
+
 // All three fields can be generated in the backend without changing the classifier model.
 export type BackendLearningSummary = {
   changes_made: string[];
@@ -147,6 +159,74 @@ function isClassification(
   value: unknown
 ): value is "Legitimate" | "Potential threat" {
   return value === "Legitimate" || value === "Potential threat";
+}
+
+function isGmailConnectionStatus(
+  value: unknown
+): value is GmailConnectionStatus {
+  if (!isRecord(value)) return false;
+
+  return (
+    (
+      value.state === "disconnected" ||
+      value.state === "connecting" ||
+      value.state === "connected" ||
+      value.state === "failed" ||
+      value.state === "cancelled"
+    ) &&
+    typeof value.connected === "boolean" &&
+    (value.email === null || typeof value.email === "string") &&
+    (value.error === null || typeof value.error === "string") &&
+    typeof value.credentials_configured === "boolean"
+  );
+}
+
+function requireGmailConnectionStatus(
+  payload: unknown
+): GmailConnectionStatus {
+  if (!isGmailConnectionStatus(payload)) {
+    throw new ApiError(
+      "The Gmail connection response doesn't match the FastAPI contract.",
+      200
+    );
+  }
+  return payload;
+}
+
+export async function getGmailStatus(
+  signal?: AbortSignal
+): Promise<GmailConnectionStatus> {
+  return requireGmailConnectionStatus(
+    await requestJson("/api/gmail/status", { signal })
+  );
+}
+
+export async function connectGmail(): Promise<GmailConnectionStatus> {
+  return requireGmailConnectionStatus(
+    await requestJson("/api/gmail/connect", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+    })
+  );
+}
+
+export async function disconnectGmail(): Promise<GmailDisconnectResult> {
+  const payload = await requestJson("/api/gmail/disconnect", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+  });
+
+  if (
+    !isRecord(payload) ||
+    payload.google_permission_revoked !== false ||
+    !isGmailConnectionStatus(payload)
+  ) {
+    throw new ApiError(
+      "The Gmail disconnect response doesn't match the FastAPI contract.",
+      200
+    );
+  }
+  return payload as GmailDisconnectResult;
 }
 
 function isDemoEmail(value: unknown): value is DemoEmailResponse {
