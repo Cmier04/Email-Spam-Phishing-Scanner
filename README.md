@@ -22,6 +22,14 @@ Disconnecting does not revoke permission in the Google account. Revoke it
 separately from the Google Account permissions page if that is desired.
 `credentials.json`, `token.json`, and temporary token files are Git-ignored.
 
+### Scanning Gmail from the dashboard
+
+With Gmail connected, open the Dashboard, select **Gmail inbox**, and choose
+**Scan emails**. The frontend verifies the saved connection and requests up to
+25 recent inbox messages from `GET /api/gmail/recent`. Gmail and synthetic
+training results are held separately; use **Training demo** to return to the
+synthetic examples without adding them to a Gmail scan.
+
 ## Learning Lab API
 
 The backend exposes `POST /api/what-if`. It retrieves one Gmail message by its

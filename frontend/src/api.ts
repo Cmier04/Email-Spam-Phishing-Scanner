@@ -1,6 +1,7 @@
 
 import type { Email } from "./data/mockEmails";
 import type { WhatIfRequest } from "./data/labTransformations";
+import { mapGmailMessageToEmail } from "./data/emailPresentation";
 
 // Browser requests use Vite's same-origin /api proxy during development.
 // VITE_API_BASE_URL may override this for a separately hosted API;
@@ -26,6 +27,19 @@ type DemoEmailResponse = {
   action_label?: string | null;
   attachment?: string | null;
   signature?: string | null;
+};
+
+export type GmailMessageResponse = {
+  id: string;
+  thread_id: string;
+  sender: string;
+  recipient: string;
+  subject: string;
+  date: string;
+  snippet: string;
+  body: string;
+  classification: "Legitimate" | "Potential threat";
+  confidence: number;
 };
 
 export type AppliedTransformation = {
@@ -252,6 +266,42 @@ function isDemoEmail(value: unknown): value is DemoEmailResponse {
     typeof value.body === "string" &&
     typeof value.request === "string"
   );
+}
+
+function isGmailMessage(value: unknown): value is GmailMessageResponse {
+  if (!isRecord(value)) return false;
+
+  return (
+    typeof value.id === "string" &&
+    typeof value.thread_id === "string" &&
+    typeof value.sender === "string" &&
+    typeof value.recipient === "string" &&
+    typeof value.subject === "string" &&
+    typeof value.date === "string" &&
+    typeof value.snippet === "string" &&
+    typeof value.body === "string" &&
+    isClassification(value.classification) &&
+    isProbability(value.confidence)
+  );
+}
+
+export async function getRecentGmailEmails(
+  limit = 25,
+  signal?: AbortSignal
+): Promise<Email[]> {
+  const payload = await requestJson(
+    `/api/gmail/recent?limit=${encodeURIComponent(String(limit))}`,
+    { signal }
+  );
+
+  if (!Array.isArray(payload) || !payload.every(isGmailMessage)) {
+    throw new ApiError(
+      "The Gmail scan response doesn't match the FastAPI contract.",
+      200
+    );
+  }
+
+  return payload.map(mapGmailMessageToEmail);
 }
 
 function isLearningSummary(

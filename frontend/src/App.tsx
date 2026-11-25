@@ -1,5 +1,5 @@
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   CircleCheck,
   Inbox,
@@ -16,8 +16,18 @@ import EmailDetail from "./components/EmailDetail";
 import SettingsPage from "./components/SettingsPage";
 import HelpCenterPage from "./components/HelpCenterPage";
 
-import { getDemoEmails } from "./api";
+import {
+  getDemoEmails,
+  getGmailStatus,
+  getRecentGmailEmails,
+} from "./api";
 import type { Email } from "./data/mockEmails";
+import {
+  calculateEmailStats,
+  emailsForMode,
+  loadConnectedGmailEmails,
+  type EmailMode,
+} from "./data/emailPresentation";
 import { withHeaderCrossfade } from "./data/headerCrossfade";
 import "./animations.css";
 
@@ -33,20 +43,22 @@ function App() {
   const [selectedEmail, setSelectedEmail] =
     useState<Email | null>(null);
 
-  // Synthetic examples are fetched from FastAPI, which runs the local classifier.
-  const [emails, setEmails] = useState<Email[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [reloadCount, setReloadCount] = useState(0);
+  const [emailMode, setEmailMode] = useState<EmailMode>("gmail");
+  const [demoEmails, setDemoEmails] = useState<Email[]>([]);
+  const [gmailEmails, setGmailEmails] = useState<Email[]>([]);
+  const [demoLoading, setDemoLoading] = useState(true);
+  const [gmailLoading, setGmailLoading] = useState(false);
+  const [demoError, setDemoError] = useState<string | null>(null);
+  const [gmailError, setGmailError] = useState<string | null>(null);
+  const [demoReloadCount, setDemoReloadCount] = useState(0);
+  const [demoLoadedAt, setDemoLoadedAt] = useState<number | null>(null);
+  const [gmailScannedAt, setGmailScannedAt] = useState<number | null>(null);
+  const gmailScanController = useRef<AbortController | null>(null);
 
-  // Last successful demo result fetch, not a Gmail scan timestamp.
-  const [lastLoadedAt, setLastLoadedAt] =
-    useState<number | null>(null);
-
-  const reloadEmails = useCallback(() => {
-    setLoading(true);
-    setError(null);
-    setReloadCount((count) => count + 1);
+  const reloadDemoEmails = useCallback(() => {
+    setDemoLoading(true);
+    setDemoError(null);
+    setDemoReloadCount((count) => count + 1);
   }, []);
 
   useEffect(() => {
@@ -55,16 +67,16 @@ function App() {
     getDemoEmails(controller.signal)
       .then((loaded) => {
         if (!controller.signal.aborted) {
-          setEmails(loaded);
-          setError(null);
-          setLastLoadedAt(Date.now());
+          setDemoEmails(loaded);
+          setDemoError(null);
+          setDemoLoadedAt(Date.now());
         }
       })
       .catch((failure: unknown) => {
         if (controller.signal.aborted) return;
 
-        setEmails([]);
-        setError(
+        setDemoEmails([]);
+        setDemoError(
           failure instanceof Error
             ? failure.message
             : "Could not load the demonstration emails."
@@ -72,12 +84,56 @@ function App() {
       })
       .finally(() => {
         if (!controller.signal.aborted) {
-          setLoading(false);
+          setDemoLoading(false);
         }
       });
 
     return () => controller.abort();
-  }, [reloadCount]);
+  }, [demoReloadCount]);
+
+  useEffect(() => () => {
+    gmailScanController.current?.abort();
+    gmailScanController.current = null;
+  }, []);
+
+  const scanGmailEmails = useCallback(async () => {
+    if (gmailScanController.current) return;
+
+    const controller = new AbortController();
+    gmailScanController.current = controller;
+    setGmailLoading(true);
+    setGmailError(null);
+
+    try {
+      const loaded = await loadConnectedGmailEmails(
+        () => getGmailStatus(controller.signal),
+        () => getRecentGmailEmails(25, controller.signal)
+      );
+      if (!controller.signal.aborted) {
+        setGmailEmails(loaded);
+        setGmailScannedAt(Date.now());
+      }
+    } catch (failure) {
+      if (!controller.signal.aborted) {
+        setGmailError(
+          failure instanceof Error
+            ? failure.message
+            : "The Gmail scan could not be completed."
+        );
+      }
+    } finally {
+      if (gmailScanController.current === controller) {
+        gmailScanController.current = null;
+        setGmailLoading(false);
+      }
+    }
+  }, []);
+
+  const emails = emailsForMode(emailMode, demoEmails, gmailEmails);
+  const loading = emailMode === "gmail" ? gmailLoading : demoLoading;
+  const error = emailMode === "gmail" ? gmailError : demoError;
+  const lastLoadedAt = emailMode === "gmail" ? gmailScannedAt : demoLoadedAt;
+  const reloadEmails = emailMode === "gmail" ? scanGmailEmails : reloadDemoEmails;
 
   function navigate(page: AppPage) {
     // Close the mobile navigation menu.
@@ -106,27 +162,15 @@ function App() {
     window.scrollTo(0, 0);
   }
 
+  function changeEmailMode(mode: EmailMode) {
+    if (mode === emailMode) return;
+    withHeaderCrossfade(() => setEmailMode(mode));
+  }
+
   // Keep existing results visible during refresh; skeletons are only for the first load.
   const showInitialSkeletons = loading && emails.length === 0;
 
-  // Statistics are calculated from returned emails.
-  const legitimateCount = emails.filter(
-    (email) => email.classification === "Legitimate"
-  ).length;
-
-  const threatCount = emails.filter(
-    (email) => email.classification === "Potential threat"
-  ).length;
-
-  const meanConfidence =
-    emails.length > 0
-      ? Math.round(
-          emails.reduce(
-            (sum, email) => sum + email.confidence,
-            0
-          ) / emails.length
-        )
-      : null;
+  const stats = calculateEmailStats(emails);
 
   return (
     <div className="min-h-screen bg-[#f6f8fb] text-[#17213c]">
@@ -170,6 +214,8 @@ function App() {
               error={error}
               onRetry={reloadEmails}
               lastLoadedAt={lastLoadedAt}
+              emailMode={emailMode}
+              onEmailModeChange={changeEmailMode}
               title={
                 activePage === "results"
                   ? "Scan results"
@@ -182,12 +228,24 @@ function App() {
               }
             />
 
+            {error && (
+              <div
+                role="alert"
+                className="mx-auto mt-5 max-w-[1280px] rounded-xl border border-[#f1c9c9] bg-[#fff4f4] px-5 py-3 text-xs font-medium text-[#a92c2c] md:px-6"
+              >
+                {error}
+              </div>
+            )}
+
             {activePage === "results" ? (
               <ScanResultsPage
+                key={emailMode}
                 emails={emails}
                 loading={loading}
                 error={error}
                 onSelect={openEmail}
+                emailMode={emailMode}
+                hasLoaded={lastLoadedAt !== null}
               />
             ) : (
               <div className="phishlab-dashboard-stagger mx-auto max-w-[1280px] px-5 py-7 md:px-8 md:py-9">
@@ -199,7 +257,9 @@ function App() {
                     </h2>
 
                     <p className="mt-1 text-sm text-[#747e93]">
-                      Explore sample emails classified by the local ML model.
+                      {emailMode === "gmail"
+                        ? "Scan recent Gmail messages with the local ML model."
+                        : "Explore synthetic training emails classified by the local ML model."}
                     </p>
                   </div>
 
@@ -214,7 +274,9 @@ function App() {
                     }`}
                     title={
                       error ??
-                      "Local FastAPI demo connection; Gmail scanning is not enabled."
+                      (emailMode === "gmail"
+                        ? "Live Gmail scan mode"
+                        : "Synthetic training mode")
                     }
                   >
                     <span
@@ -231,11 +293,15 @@ function App() {
                       ? "Offline · Connection failed"
                       : loading
                         ? "Connecting..."
-                        : "Connected"}
+                        : emailMode === "gmail"
+                          ? lastLoadedAt === null
+                            ? "Gmail mode · Ready to scan"
+                            : "Gmail mode · Scan complete"
+                          : "Demo mode"}
                   </div>
                 </div>
 
-                {/* Statistics from the loaded synthetic emails. */}
+                {/* Statistics are calculated only from the active data mode. */}
                 <section
                   aria-label="Email statistics"
                   className="phishlab-dashboard-metrics mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4"
@@ -259,15 +325,15 @@ function App() {
                     <>
                       <MetricCard
                         label="Emails scanned"
-                        value={String(emails.length)}
-                        note="synthetic examples"
+                        value={String(stats.total)}
+                        note={emailMode === "gmail" ? "recent Gmail messages" : "synthetic examples"}
                         icon={Inbox}
                         color="blue"
                       />
 
                       <MetricCard
                         label="Legitimate"
-                        value={String(legitimateCount)}
+                        value={String(stats.legitimate)}
                         note="model classifications"
                         icon={CircleCheck}
                         color="green"
@@ -275,7 +341,7 @@ function App() {
 
                       <MetricCard
                         label="Potential threats"
-                        value={String(threatCount)}
+                        value={String(stats.threats)}
                         note="model classifications"
                         icon={TriangleAlert}
                         color="red"
@@ -284,11 +350,11 @@ function App() {
                       <MetricCard
                         label="Avg. confidence"
                         value={
-                          meanConfidence === null
+                          stats.meanConfidence === null
                             ? "—"
-                            : `${meanConfidence}%`
+                            : `${stats.meanConfidence}%`
                         }
-                        note="among loaded examples"
+                        note={emailMode === "gmail" ? "among scanned messages" : "among loaded examples"}
                         icon={ShieldCheck}
                         color="violet"
                       />
@@ -301,13 +367,18 @@ function App() {
                     role="status"
                     className="mb-4 text-xs text-[#747e93]"
                   >
-                    Loading model-classified examples from FastAPI...
+                    {emailMode === "gmail"
+                      ? "Scanning recent Gmail messages..."
+                      : "Loading model-classified training examples..."}
                   </p>
                 )}
 
                 <EmailResultsTable
+                  key={emailMode}
                   emails={emails}
                   loading={loading}
+                  emailMode={emailMode}
+                  hasLoaded={lastLoadedAt !== null}
                   onSelect={openEmail}
                   onViewAll={() => navigate("results")}
                 />
