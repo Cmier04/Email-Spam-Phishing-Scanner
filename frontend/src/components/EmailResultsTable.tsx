@@ -2,12 +2,15 @@
 import { useState } from "react";
 import { ChevronRight, Search } from "lucide-react";
 import type { Email } from "../data/mockEmails";
+import type { EmailMode } from "../data/emailPresentation";
 
 type EmailFilter = "All emails" | Email["classification"];
 
 type EmailResultsTableProps = {
   emails: Email[];
   loading?: boolean;
+  emailMode: EmailMode;
+  hasLoaded: boolean;
   onSelect: (email: Email) => void;
   onViewAll: () => void;
 };
@@ -32,7 +35,14 @@ const riskStyles: Record<Email["risk"], string> = {
   High: "bg-[#ffebe7] text-[#b8493b]",
 };
 
-function EmailResultsTable({ emails, loading = false, onSelect, onViewAll }: EmailResultsTableProps) {
+function EmailResultsTable({
+  emails,
+  loading = false,
+  emailMode,
+  hasLoaded,
+  onSelect,
+  onViewAll,
+}: EmailResultsTableProps) {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<EmailFilter>("All emails");
 
@@ -66,7 +76,9 @@ function EmailResultsTable({ emails, loading = false, onSelect, onViewAll }: Ema
           </h2>
 
           <p className="mt-1 text-xs text-[#8a92a4]">
-            Synthetic emails evaluated by your local classifier
+            {emailMode === "gmail"
+              ? "Recent Gmail messages evaluated by your local classifier"
+              : "Synthetic training emails evaluated by your local classifier"}
           </p>
         </div>
 
@@ -126,7 +138,7 @@ function EmailResultsTable({ emails, loading = false, onSelect, onViewAll }: Ema
               <th className="px-4 py-3">Subject</th>
               <th className="px-4 py-3">Classification</th>
               <th className="px-4 py-3">Confidence</th>
-              <th className="px-4 py-3">Demo risk</th>
+              <th className="px-4 py-3">{emailMode === "gmail" ? "Date" : "Demo risk"}</th>
               <th className="px-4 py-3">Details</th>
             </tr>
           </thead>
@@ -223,11 +235,17 @@ function EmailResultsTable({ emails, loading = false, onSelect, onViewAll }: Ema
                   </td>
 
                   <td className="px-4 py-4">
-                    <span
-                      className={`rounded-md px-2 py-1 text-[11px] font-semibold ${riskStyles[email.risk]}`}
-                    >
-                      {email.risk}
-                    </span>
+                    {emailMode === "gmail" ? (
+                      <span className="text-[11px] font-medium text-[#647086]">
+                        {email.time}
+                      </span>
+                    ) : (
+                      <span
+                        className={`rounded-md px-2 py-1 text-[11px] font-semibold ${riskStyles[email.risk]}`}
+                      >
+                        {email.risk}
+                      </span>
+                    )}
                   </td>
 
                   <td className="px-4 py-4">
@@ -252,10 +270,18 @@ function EmailResultsTable({ emails, loading = false, onSelect, onViewAll }: Ema
         {!showSkeleton && visibleEmails.length === 0 && (
           <div className="py-12 text-center">
             <p className="text-sm font-semibold text-[#4c566c]">
-              No matching emails
+              {emailMode === "gmail" && hasLoaded && emails.length === 0
+                ? "No Gmail messages found"
+                : emailMode === "gmail" && !hasLoaded
+                  ? "No Gmail scan yet"
+                  : "No matching emails"}
             </p>
             <p className="mt-1 text-xs text-[#9198a8]">
-              Try changing your search or filter.
+              {emailMode === "gmail" && !hasLoaded
+                ? "Select Scan emails to retrieve recent inbox messages."
+                : emailMode === "gmail" && emails.length === 0
+                  ? "The recent inbox query returned no messages."
+                  : "Try changing your search or filter."}
             </p>
           </div>
         )}
