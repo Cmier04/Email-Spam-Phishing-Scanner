@@ -7,7 +7,7 @@ __pycache__/
 # Gmail credentials
 backend/.env
 backend/credentials.json
-backend/token.json
+backend/token.json*
 
 # Node dependencies (large files)
 node_modules/

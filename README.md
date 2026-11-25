@@ -4,6 +4,32 @@ A desktop application which classifies, notifies, and teaches users about spam a
 This repository houses the frontend/backend implementation and utilizes the machine learning model developed in a separate repo:  
 >[Email Spam/Phishing Classifier](https://github.com/MW562/email_spam-phishing_classifier)
 
+## Gmail account connection
+
+Place a Google Desktop OAuth client file at `backend/credentials.json`. Start
+the backend and frontend as described below, then open **Settings** and select
+**Connect Gmail**. PhishLab opens Google's authorization page and polls the
+local backend while authorization is pending. The only requested Gmail scope
+is `gmail.readonly`.
+
+The local account-management API is:
+
+- `GET /api/gmail/status` — inspect saved authorization without opening OAuth.
+- `POST /api/gmail/connect` — begin a bounded background desktop OAuth flow.
+- `POST /api/gmail/disconnect` — delete the local `backend/token.json`.
+
+Disconnecting does not revoke permission in the Google account. Revoke it
+separately from the Google Account permissions page if that is desired.
+`credentials.json`, `token.json`, and temporary token files are Git-ignored.
+
+### Scanning Gmail from the dashboard
+
+With Gmail connected, open the Dashboard, select **Gmail inbox**, and choose
+**Scan emails**. The frontend verifies the saved connection and requests up to
+25 recent inbox messages from `GET /api/gmail/recent`. Gmail and synthetic
+training results are held separately; use **Training demo** to return to the
+synthetic examples without adding them to a Gmail scan.
+
 ## Learning Lab API
 
 The backend exposes `POST /api/what-if`. It retrieves one Gmail message by its

@@ -1,6 +1,7 @@
 
 import type { Email } from "./data/mockEmails";
 import type { WhatIfRequest } from "./data/labTransformations";
+import { mapGmailMessageToEmail } from "./data/emailPresentation";
 
 // Browser requests use Vite's same-origin /api proxy during development.
 // VITE_API_BASE_URL may override this for a separately hosted API;
@@ -28,12 +29,37 @@ type DemoEmailResponse = {
   signature?: string | null;
 };
 
+export type GmailMessageResponse = {
+  id: string;
+  thread_id: string;
+  sender: string;
+  recipient: string;
+  subject: string;
+  date: string;
+  snippet: string;
+  body: string;
+  classification: "Legitimate" | "Potential threat";
+  confidence: number;
+};
+
 export type AppliedTransformation = {
   part: string;
   transformation_id: string;
   applied: boolean;
   affects_classifier: boolean;
   message: string;
+};
+
+export type GmailConnectionStatus = {
+  state: "disconnected" | "connecting" | "connected" | "failed" | "cancelled";
+  connected: boolean;
+  email: string | null;
+  error: string | null;
+  credentials_configured: boolean;
+};
+
+export type GmailDisconnectResult = GmailConnectionStatus & {
+  google_permission_revoked: false;
 };
 
 // All three fields can be generated in the backend without changing the classifier model.
@@ -149,6 +175,74 @@ function isClassification(
   return value === "Legitimate" || value === "Potential threat";
 }
 
+function isGmailConnectionStatus(
+  value: unknown
+): value is GmailConnectionStatus {
+  if (!isRecord(value)) return false;
+
+  return (
+    (
+      value.state === "disconnected" ||
+      value.state === "connecting" ||
+      value.state === "connected" ||
+      value.state === "failed" ||
+      value.state === "cancelled"
+    ) &&
+    typeof value.connected === "boolean" &&
+    (value.email === null || typeof value.email === "string") &&
+    (value.error === null || typeof value.error === "string") &&
+    typeof value.credentials_configured === "boolean"
+  );
+}
+
+function requireGmailConnectionStatus(
+  payload: unknown
+): GmailConnectionStatus {
+  if (!isGmailConnectionStatus(payload)) {
+    throw new ApiError(
+      "The Gmail connection response doesn't match the FastAPI contract.",
+      200
+    );
+  }
+  return payload;
+}
+
+export async function getGmailStatus(
+  signal?: AbortSignal
+): Promise<GmailConnectionStatus> {
+  return requireGmailConnectionStatus(
+    await requestJson("/api/gmail/status", { signal })
+  );
+}
+
+export async function connectGmail(): Promise<GmailConnectionStatus> {
+  return requireGmailConnectionStatus(
+    await requestJson("/api/gmail/connect", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+    })
+  );
+}
+
+export async function disconnectGmail(): Promise<GmailDisconnectResult> {
+  const payload = await requestJson("/api/gmail/disconnect", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+  });
+
+  if (
+    !isRecord(payload) ||
+    payload.google_permission_revoked !== false ||
+    !isGmailConnectionStatus(payload)
+  ) {
+    throw new ApiError(
+      "The Gmail disconnect response doesn't match the FastAPI contract.",
+      200
+    );
+  }
+  return payload as GmailDisconnectResult;
+}
+
 function isDemoEmail(value: unknown): value is DemoEmailResponse {
   if (!isRecord(value)) return false;
 
@@ -172,6 +266,42 @@ function isDemoEmail(value: unknown): value is DemoEmailResponse {
     typeof value.body === "string" &&
     typeof value.request === "string"
   );
+}
+
+function isGmailMessage(value: unknown): value is GmailMessageResponse {
+  if (!isRecord(value)) return false;
+
+  return (
+    typeof value.id === "string" &&
+    typeof value.thread_id === "string" &&
+    typeof value.sender === "string" &&
+    typeof value.recipient === "string" &&
+    typeof value.subject === "string" &&
+    typeof value.date === "string" &&
+    typeof value.snippet === "string" &&
+    typeof value.body === "string" &&
+    isClassification(value.classification) &&
+    isProbability(value.confidence)
+  );
+}
+
+export async function getRecentGmailEmails(
+  limit = 25,
+  signal?: AbortSignal
+): Promise<Email[]> {
+  const payload = await requestJson(
+    `/api/gmail/recent?limit=${encodeURIComponent(String(limit))}`,
+    { signal }
+  );
+
+  if (!Array.isArray(payload) || !payload.every(isGmailMessage)) {
+    throw new ApiError(
+      "The Gmail scan response doesn't match the FastAPI contract.",
+      200
+    );
+  }
+
+  return payload.map(mapGmailMessageToEmail);
 }
 
 function isLearningSummary(
