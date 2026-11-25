@@ -54,15 +54,15 @@ function EmailDetail({
         </div>
       </header>
 
-      <div className={`${labActive ? "" : "phishlab-email-stagger"} mx-auto max-w-[1120px] px-5 py-8 md:px-8`}>
+      <div className={`${labActive ? "" : "phishlab-email-stagger"} mx-auto w-full max-w-[1280px] px-5 py-8 md:px-8`}>
         {/* Email title and classification */}
-        <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
-          <div>
+        <div className="mb-6 flex min-w-0 flex-wrap items-start justify-between gap-4">
+          <div className="min-w-0 flex-1">
             <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-[#9299aa]">
               Email analysis
             </p>
 
-            <h1 className="max-w-3xl text-2xl font-bold tracking-tight text-[#17213c]">
+            <h1 className="max-w-3xl [overflow-wrap:anywhere] text-2xl font-bold tracking-tight text-[#17213c]">
               {email.subject}
             </h1>
           </div>
@@ -78,9 +78,9 @@ function EmailDetail({
           </span>
         </div>
 
-        <div className="grid gap-5 xl:grid-cols-[1.55fr_.85fr]">
+        <div className="grid min-w-0 gap-5 xl:grid-cols-[minmax(0,1.65fr)_minmax(300px,0.85fr)]">
           {/* Left column: email content */}
-          <section className="rounded-2xl border border-[#e3e7ee] bg-white shadow-sm">
+          <section className="min-w-0 rounded-2xl border border-[#e3e7ee] bg-white shadow-sm">
             <div className="border-b border-[#e8ebf1] p-6">
               <div className="flex items-start gap-4">
                 <div
@@ -90,7 +90,7 @@ function EmailDetail({
                 </div>
 
                 <div className="min-w-0">
-                  <p className="font-semibold text-[#202a44]">
+                  <p className="[overflow-wrap:anywhere] font-semibold text-[#202a44]">
                     {email.sender}
                   </p>
 
@@ -106,19 +106,19 @@ function EmailDetail({
             </div>
 
             {/* Displayed message is read-only. */}
-            <div className="p-6 md:p-8">
+            <div className="min-w-0 p-6 md:p-8">
               {email.greeting && (
-                <p className="mb-5 text-[15px] leading-7 text-[#39445d]">
+                <p className="mb-5 [overflow-wrap:anywhere] text-[15px] leading-7 text-[#39445d]">
                   {email.greeting}
                 </p>
               )}
 
-              <p className="mb-5 whitespace-pre-wrap break-words text-[15px] leading-7 text-[#39445d]">
+              <p className="mb-5 min-w-0 whitespace-pre-wrap [overflow-wrap:anywhere] text-[15px] leading-7 text-[#39445d]">
                 {email.body ?? email.preview}
               </p>
 
               {email.request && (
-                <p className="mb-5 text-[15px] leading-7 text-[#39445d]">
+                <p className="mb-5 [overflow-wrap:anywhere] text-[15px] leading-7 text-[#39445d]">
                   {email.request}
                 </p>
               )}
@@ -130,7 +130,7 @@ function EmailDetail({
                     type="button"
                     disabled
                     title="Example action only - no link will open"
-                    className="cursor-not-allowed rounded-lg bg-[#3157d5] px-5 py-2.5 text-sm font-semibold text-white opacity-60"
+                    className="max-w-full cursor-not-allowed rounded-lg bg-[#3157d5] px-5 py-2.5 [overflow-wrap:anywhere] text-sm font-semibold text-white opacity-60"
                   >
                     {email.actionLabel}
                   </button>
@@ -142,7 +142,7 @@ function EmailDetail({
               )}
 
               {email.attachment && (
-                <div className="mt-6 flex w-fit items-center gap-2 rounded-lg border border-[#e0e5ed] px-3 py-2 text-xs text-[#657087]">
+                <div className="mt-6 flex max-w-full flex-wrap items-center gap-2 rounded-lg border border-[#e0e5ed] px-3 py-2 [overflow-wrap:anywhere] text-xs text-[#657087]">
                   <Paperclip size={15} />
                   {email.attachment}
                   <span className="text-[#9aa2b2]">
@@ -152,7 +152,7 @@ function EmailDetail({
               )}
 
               {email.signature && (
-                <p className="mt-6 text-xs leading-5 text-[#6f798d]">
+                <p className="mt-6 [overflow-wrap:anywhere] text-xs leading-5 text-[#6f798d]">
                   {email.signature}
                 </p>
               )}
@@ -160,7 +160,7 @@ function EmailDetail({
           </section>
 
           {/* Right column: assessment and guidance */}
-          <div className="space-y-5">
+          <div className="min-w-0 space-y-5">
             <section
               className={`rounded-2xl border p-6 ${
                 isThreat
@@ -194,7 +194,7 @@ function EmailDetail({
                 </div>
               </div>
 
-              <p className="text-sm leading-6 text-[#596579]">
+              <p className="[overflow-wrap:anywhere] text-sm leading-6 text-[#596579]">
                 {isThreat
                   ? "This message is labeled as a potential threat. Review unexpected requests carefully and verify them independently."
                   : "This message is labeled as legitimate. Always check unexpected requests, even when a message seems familiar."}

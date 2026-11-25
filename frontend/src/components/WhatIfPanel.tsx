@@ -21,6 +21,62 @@ type WhatIfPanelProps = {
   error: string | null;
 };
 
+const COMPARISON_PREVIEW_LENGTH = 240;
+
+type ComparisonSide = "original" | "modified";
+
+function ComparisonCard({
+  label,
+  value,
+  modified = false,
+  hasAppliedChange,
+  focused,
+  expanded,
+  onClick,
+}: {
+  label: string;
+  value: string;
+  modified?: boolean;
+  hasAppliedChange: boolean;
+  focused: boolean;
+  expanded: boolean;
+  onClick: () => void;
+}) {
+  const characters = Array.from(value);
+  const isLong = characters.length > COMPARISON_PREVIEW_LENGTH;
+  const displayed = isLong && !expanded
+    ? `${characters.slice(0, COMPARISON_PREVIEW_LENGTH).join("").trimEnd()}…`
+    : value;
+  const activeStyle = focused
+    ? "border-[#8097df] bg-[#f2f5ff] shadow-sm"
+    : modified && hasAppliedChange
+      ? "border-[#cbd5f5] bg-[#f4f6ff]"
+      : "border-[#e1e6ee] bg-white hover:border-[#bdc9e7]";
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={focused}
+      aria-expanded={isLong ? expanded : undefined}
+      title={isLong ? (expanded ? "Click again to collapse" : focused ? "Click again to expand" : "Select, then click again to expand") : undefined}
+      className={`block w-full min-w-0 rounded-xl border p-3 text-left transition focus-visible:outline-2 focus-visible:outline-[#3157d5] ${activeStyle}`}
+    >
+      <span className={`mb-2 block text-[10px] font-bold uppercase ${modified ? "text-[#3157d5]" : "text-[#9299aa]"}`}>
+        {label}
+      </span>
+      <span className={`block min-w-0 whitespace-pre-line break-words [overflow-wrap:anywhere] text-xs leading-5 ${modified ? "text-[#35415c]" : "text-[#596579]"}`}>
+        {displayed || "—"}
+      </span>
+      {isLong && focused && (
+        <span className="mt-2 block text-[10px] font-semibold text-[#3157d5]">
+          {expanded ? "Click again to collapse" : "Click again to expand"}
+        </span>
+      )}
+    </button>
+  );
+}
+
 // These transformations are registered by FastAPI but currently return
 // an "unavailable" result because their metadata is not parsed separately.
 const unavailableIds = new Set(["link-placeholder", "attachment-label", "signature-fictional"]);
@@ -46,6 +102,27 @@ function WhatIfPanel({
 }: WhatIfPanelProps) {
   const heightRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
+
+  // Compare cards are selected independently of the applied What-If change.
+  // Keying by content prevents expanded text carrying over to a new component.
+  const comparisonKey = `${title}:${originalValue}:${modifiedValue}`;
+  const [comparisonView, setComparisonView] = useState<{
+    key: string;
+    side: ComparisonSide | null;
+    expanded: boolean;
+  }>({ key: comparisonKey, side: null, expanded: false });
+  const focusedSide = comparisonView.key === comparisonKey ? comparisonView.side : null;
+  const expandedSide = comparisonView.key === comparisonKey && comparisonView.expanded
+    ? comparisonView.side
+    : null;
+
+  function handleComparisonClick(side: ComparisonSide) {
+    setComparisonView((current) =>
+      current.key === comparisonKey && current.side === side
+        ? { key: comparisonKey, side, expanded: !current.expanded }
+        : { key: comparisonKey, side, expanded: false }
+    );
+  }
 
   // Animate real content-size changes, including when new score cards appear.
   // The lab stays mounted while hidden; measure only when it is visible.
@@ -151,19 +228,31 @@ function WhatIfPanel({
             </button>
           )}
         </div>
+        <p className="mt-1 text-[10px] text-[#8a92a4]">
+          Select a card, then click it again to expand or collapse long text.
+        </p>
         <CrossfadeContent
-          changeKey={`${title}:${originalValue}:${modifiedValue}`}
+          changeKey={comparisonKey}
           className="mt-3"
-          contentClassName="grid gap-3 sm:grid-cols-2"
+          contentClassName="grid min-w-0 gap-3 sm:grid-cols-2"
         >
-          <div className="rounded-xl border border-[#e1e6ee] bg-white p-3">
-            <p className="mb-2 text-[10px] font-bold uppercase text-[#9299aa]">Original</p>
-            <p className="break-words whitespace-pre-line text-xs leading-5 text-[#596579]">{originalValue}</p>
-          </div>
-          <div className={`rounded-xl border p-3 ${selected ? "border-[#cbd5f5] bg-[#f4f6ff]" : "border-[#e1e6ee] bg-white"}`}>
-            <p className="mb-2 text-[10px] font-bold uppercase text-[#3157d5]">Modified copy</p>
-            <p className="break-words whitespace-pre-line text-xs leading-5 text-[#35415c]">{modifiedValue}</p>
-          </div>
+          <ComparisonCard
+            label="Original"
+            value={originalValue}
+            hasAppliedChange={Boolean(selected)}
+            focused={focusedSide === "original"}
+            expanded={expandedSide === "original"}
+            onClick={() => handleComparisonClick("original")}
+          />
+          <ComparisonCard
+            label="Modified copy"
+            value={modifiedValue}
+            modified
+            hasAppliedChange={Boolean(selected)}
+            focused={focusedSide === "modified"}
+            expanded={expandedSide === "modified"}
+            onClick={() => handleComparisonClick("modified")}
+          />
         </CrossfadeContent>
 
         <div className="mt-4 rounded-xl border border-[#dce3f5] bg-white p-4" aria-live="polite" aria-busy={loading}>

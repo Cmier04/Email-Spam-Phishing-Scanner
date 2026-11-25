@@ -1,4 +1,3 @@
-
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   CircleCheck,
@@ -15,33 +14,58 @@ import ScanResultsPage from "./components/ScanResultsPage";
 import EmailDetail from "./components/EmailDetail";
 import SettingsPage from "./components/SettingsPage";
 import HelpCenterPage from "./components/HelpCenterPage";
+import StartupScreen from "./components/StartupScreen";
+import ConnectionIssueDialog from "./components/ConnectionIssueDialog";
 
 import {
+  ApiError,
+  connectGmail,
+  disconnectGmail,
   getDemoEmails,
   getGmailStatus,
   getRecentGmailEmails,
+  type GmailConnectionStatus,
 } from "./api";
 import type { Email } from "./data/mockEmails";
 import {
   calculateEmailStats,
   emailsForMode,
-  loadConnectedGmailEmails,
   type EmailMode,
 } from "./data/emailPresentation";
 import { withHeaderCrossfade } from "./data/headerCrossfade";
 import "./animations.css";
 
+type BackendRetry = "startup" | "demo" | "gmail-status" | "scan" | "connect" | "disconnect";
+type BackendIssue = { message: string; retry: BackendRetry };
+type ScanOutcome = "success" | "gmail" | "failed";
+
+function errorMessage(failure: unknown): string {
+  return failure instanceof Error ? failure.message : "An unexpected request error occurred.";
+}
+
+// A Gmail-specific OAuth failure is NOT the same as FastAPI being offline.
+// The original backend returns useful details for missing credentials and
+// Google authorization errors. Keep those in the Gmail dialog.
+function isBackendUnavailable(failure: unknown): failure is ApiError {
+  return failure instanceof ApiError && (
+    failure.status === 0 ||
+    /^FastAPI returned HTTP \d+\.$/.test(failure.message) ||
+    failure.message === "FastAPI returned an invalid JSON response."
+  );
+}
+
+function greetingForTime(date: Date): string {
+  const hour = date.getHours();
+  if (hour < 12) return "Good Morning";
+  if (hour < 17) return "Good Afternoon";
+  return "Good Evening";
+}
+
 function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-
-  // Controls whether the desktop sidebar is expanded or icon-only.
-  const [sidebarCollapsed, setSidebarCollapsed] =
-    useState(false);
-
-  const [activePage, setActivePage] =
-    useState<AppPage>("dashboard");
-  const [selectedEmail, setSelectedEmail] =
-    useState<Email | null>(null);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [activePage, setActivePage] = useState<AppPage>("dashboard");
+  const [selectedEmail, setSelectedEmail] = useState<Email | null>(null);
 
   const [emailMode, setEmailMode] = useState<EmailMode>("gmail");
   const [demoEmails, setDemoEmails] = useState<Email[]>([]);
@@ -50,77 +74,135 @@ function App() {
   const [gmailLoading, setGmailLoading] = useState(false);
   const [demoError, setDemoError] = useState<string | null>(null);
   const [gmailError, setGmailError] = useState<string | null>(null);
-  const [demoReloadCount, setDemoReloadCount] = useState(0);
   const [demoLoadedAt, setDemoLoadedAt] = useState<number | null>(null);
   const [gmailScannedAt, setGmailScannedAt] = useState<number | null>(null);
+  const [gmailStatus, setGmailStatus] = useState<GmailConnectionStatus | null>(null);
+  const [gmailStatusChecked, setGmailStatusChecked] = useState(false);
+  const [startupComplete, setStartupComplete] = useState(false);
+  const [minimumStartupElapsed, setMinimumStartupElapsed] = useState(false);
+  const [backendIssue, setBackendIssue] = useState<BackendIssue | null>(null);
+  const [backendRetrying, setBackendRetrying] = useState(false);
+  const [gmailConnecting, setGmailConnecting] = useState(false);
+  const [gmailDialogDismissed, setGmailDialogDismissed] = useState(false);
+  const [gmailDialogRequested, setGmailDialogRequested] = useState(false);
+  const [gmailDialogError, setGmailDialogError] = useState<string | null>(null);
+  const [now, setNow] = useState(() => Date.now());
   const gmailScanController = useRef<AbortController | null>(null);
 
-  const reloadDemoEmails = useCallback(() => {
-    setDemoLoading(true);
-    setDemoError(null);
-    setDemoReloadCount((count) => count + 1);
+  // The loading screen reflects real backend requests; a minimum display time
+  // avoids a flash on fast machines. It does not claim any simulated progress.
+  useEffect(() => {
+    const timer = window.setTimeout(() => setMinimumStartupElapsed(true), 650);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 60_000);
+    return () => window.clearInterval(timer);
   }, []);
 
   useEffect(() => {
     const controller = new AbortController();
+    let unmounted = false;
+    // Prevent an indefinitely hanging startup on inaccessible networks.
+    const timeout = window.setTimeout(() => controller.abort(), 10_000);
 
-    getDemoEmails(controller.signal)
-      .then((loaded) => {
-        if (!controller.signal.aborted) {
-          setDemoEmails(loaded);
-          setDemoError(null);
-          setDemoLoadedAt(Date.now());
-        }
-      })
-      .catch((failure: unknown) => {
-        if (controller.signal.aborted) return;
-
-        setDemoEmails([]);
-        setDemoError(
-          failure instanceof Error
-            ? failure.message
-            : "Could not load the demonstration emails."
-        );
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) {
-          setDemoLoading(false);
-        }
-      });
-
-    return () => controller.abort();
-  }, [demoReloadCount]);
+    async function startApp() {
+      const [demoResult, gmailResult] = await Promise.allSettled([
+        getDemoEmails(controller.signal),
+        getGmailStatus(controller.signal),
+      ]);
+      if (unmounted) return;
+      let firstError: string | null = null;
+      if (demoResult.status === "fulfilled") {
+        setDemoEmails(demoResult.value);
+        setDemoLoadedAt(Date.now());
+      } else {
+        firstError = controller.signal.aborted
+          ? "FastAPI did not respond before the startup check timed out."
+          : errorMessage(demoResult.reason);
+      }
+      if (gmailResult.status === "fulfilled") {
+        setGmailStatus(gmailResult.value);
+      } else if (!firstError) {
+        firstError = controller.signal.aborted
+          ? "The Gmail connection check timed out. Try reconnecting to FastAPI."
+          : errorMessage(gmailResult.reason);
+      }
+      if (firstError) setBackendIssue({ message: firstError, retry: "startup" });
+      setDemoLoading(false);
+      setGmailStatusChecked(true);
+      setStartupComplete(true);
+      window.clearTimeout(timeout);
+    }
+    void startApp();
+    return () => {
+      unmounted = true;
+      controller.abort();
+      window.clearTimeout(timeout);
+    };
+  }, []);
 
   useEffect(() => () => {
     gmailScanController.current?.abort();
     gmailScanController.current = null;
   }, []);
 
-  const scanGmailEmails = useCallback(async () => {
-    if (gmailScanController.current) return;
+  const loadDemo = useCallback(async (signal?: AbortSignal) => {
+    const loaded = await getDemoEmails(signal);
+    if (signal?.aborted) return;
+    setDemoEmails(loaded);
+    setDemoLoadedAt(Date.now());
+    setDemoError(null);
+  }, []);
 
+  const reloadDemoEmails = useCallback(async () => {
+    setDemoLoading(true);
+    setDemoError(null);
+    try {
+      await loadDemo();
+    } catch (failure) {
+      if (failure instanceof ApiError) {
+        setBackendIssue({ message: errorMessage(failure), retry: "demo" });
+      } else {
+        setDemoError(errorMessage(failure));
+      }
+    } finally {
+      setDemoLoading(false);
+    }
+  }, [loadDemo]);
+
+  const scanGmailEmails = useCallback(async (): Promise<ScanOutcome> => {
+    if (gmailScanController.current) return "failed";
     const controller = new AbortController();
     gmailScanController.current = controller;
     setGmailLoading(true);
     setGmailError(null);
 
     try {
-      const loaded = await loadConnectedGmailEmails(
-        () => getGmailStatus(controller.signal),
-        () => getRecentGmailEmails(25, controller.signal)
-      );
-      if (!controller.signal.aborted) {
-        setGmailEmails(loaded);
-        setGmailScannedAt(Date.now());
+      const status = await getGmailStatus(controller.signal);
+      if (controller.signal.aborted) return "failed";
+      setGmailStatus(status);
+      setGmailStatusChecked(true);
+      if (!status.connected) {
+        setGmailDialogRequested(true);
+        setGmailDialogError(status.error);
+        return "gmail";
       }
+      const loaded = await getRecentGmailEmails(25, controller.signal);
+      if (controller.signal.aborted) return "failed";
+      setGmailEmails(loaded);
+      setGmailScannedAt(Date.now());
+      return "success";
     } catch (failure) {
       if (!controller.signal.aborted) {
-        setGmailError(
-          failure instanceof Error
-            ? failure.message
-            : "The Gmail scan could not be completed."
-        );
+        if (failure instanceof ApiError) {
+          setBackendIssue({ message: errorMessage(failure), retry: "scan" });
+        } else {
+          setGmailError(errorMessage(failure));
+        }
       }
+      return "failed";
     } finally {
       if (gmailScanController.current === controller) {
         gmailScanController.current = null;
@@ -129,11 +211,178 @@ function App() {
     }
   }, []);
 
+  // The existing Gmail OAuth backend returns "connecting" while its local
+  // Google browser flow is pending. Poll only during that state.
+  useEffect(() => {
+    if (gmailStatus?.state !== "connecting") return;
+    let disposed = false;
+    let busy = false;
+    const poll = window.setInterval(async () => {
+      if (busy || disposed) return;
+      busy = true;
+      try {
+        const status = await getGmailStatus();
+        if (!disposed) {
+          setGmailStatus(status);
+          if (status.connected) {
+            setGmailDialogRequested(false);
+            setGmailDialogDismissed(true);
+            setGmailDialogError(null);
+          }
+        }
+      } catch (failure) {
+        if (!disposed) {
+          if (isBackendUnavailable(failure)) {
+            setBackendIssue({ message: errorMessage(failure), retry: "gmail-status" });
+          } else {
+            setGmailDialogError(errorMessage(failure));
+          }
+        }
+      } finally {
+        busy = false;
+      }
+    }, 1200);
+    return () => { disposed = true; window.clearInterval(poll); };
+  }, [gmailStatus?.state]);
+
+  // Google OAuth happens in the external browser. When the user returns to
+  // PhishLab, reconcile the current authorization without re-opening OAuth.
+  useEffect(() => {
+    if (!startupComplete || gmailStatus?.connected || backendIssue) return;
+    let disposed = false;
+    let checking = false;
+    const refresh = async () => {
+      if (checking || disposed) return;
+      checking = true;
+      try {
+        const status = await getGmailStatus();
+        if (!disposed) {
+          setGmailStatus(status);
+          setGmailStatusChecked(true);
+          if (status.connected) {
+            setGmailDialogRequested(false);
+            setGmailDialogDismissed(true);
+            setGmailDialogError(null);
+          }
+        }
+      } catch (failure) {
+        if (!disposed && isBackendUnavailable(failure)) {
+          setBackendIssue({ message: errorMessage(failure), retry: "gmail-status" });
+        }
+      } finally {
+        checking = false;
+      }
+    };
+    window.addEventListener("focus", refresh);
+    return () => {
+      disposed = true;
+      window.removeEventListener("focus", refresh);
+    };
+  }, [startupComplete, gmailStatus?.connected, backendIssue]);
+
+  const connectGmailFromDialog = useCallback(async () => {
+    if (gmailConnecting) return;
+    setGmailConnecting(true);
+    setGmailDialogError(null);
+    try {
+      const status = await connectGmail();
+      setGmailStatus(status);
+      setGmailStatusChecked(true);
+      if (status.connected) {
+        setGmailDialogRequested(false);
+        setGmailDialogDismissed(true);
+      } else if (status.state === "failed") {
+        setGmailDialogError(status.error ?? "Gmail authorization failed. Please retry.");
+      }
+      // The original backend opens Google's OAuth page in the system browser.
+      // A 202 'connecting' response is expected; status polling handles completion.
+    } catch (failure) {
+      if (isBackendUnavailable(failure)) {
+        setBackendIssue({ message: errorMessage(failure), retry: "connect" });
+      } else {
+        // A 503 (missing credentials), 403, or Gmail-specific 502 is a Gmail
+        // authorization problem, not a stopped FastAPI server.
+        setGmailDialogError(errorMessage(failure));
+      }
+    } finally {
+      setGmailConnecting(false);
+    }
+  }, [gmailConnecting]);
+
+  const retryBackend = useCallback(async () => {
+    if (!backendIssue || backendRetrying) return;
+    const retry = backendIssue.retry;
+    setBackendRetrying(true);
+    try {
+      if (retry === "scan") {
+        const outcome = await scanGmailEmails();
+        if (outcome !== "failed") setBackendIssue(null);
+        return;
+      }
+      if (retry === "connect" || retry === "disconnect") {
+        const status = retry === "connect" ? await connectGmail() : await disconnectGmail();
+        setGmailStatus(status);
+        setGmailStatusChecked(true);
+      } else if (retry === "gmail-status") {
+        const status = await getGmailStatus();
+        setGmailStatus(status);
+        setGmailStatusChecked(true);
+      } else if (retry === "demo") {
+        await loadDemo();
+      } else {
+        // Resolve both startup dependencies before showing a Gmail prompt.
+        const [loaded, status] = await Promise.all([getDemoEmails(), getGmailStatus()]);
+        setDemoEmails(loaded);
+        setDemoLoadedAt(Date.now());
+        setDemoError(null);
+        setGmailStatus(status);
+        setGmailStatusChecked(true);
+      }
+      setBackendIssue(null);
+    } catch (failure) {
+      if ((retry === "connect" || retry === "disconnect") && !isBackendUnavailable(failure)) {
+        setBackendIssue(null);
+        setGmailDialogRequested(true);
+        setGmailDialogError(errorMessage(failure));
+      } else {
+        setBackendIssue({ message: errorMessage(failure), retry });
+      }
+    } finally {
+      setBackendRetrying(false);
+    }
+  }, [backendIssue, backendRetrying, loadDemo, scanGmailEmails]);
+
+  const onGmailStatusChange = useCallback((status: GmailConnectionStatus) => {
+    setGmailStatus(status);
+    setGmailStatusChecked(true);
+    if (status.connected) {
+      setGmailDialogRequested(false);
+      setGmailDialogDismissed(true);
+      setGmailDialogError(null);
+    } else {
+      // Account actions in Settings should stay on Settings, not force a modal.
+      setGmailDialogDismissed(true);
+    }
+  }, []);
+
+  const onSettingsBackendError = useCallback((message: string, retry: "gmail-status" | "connect" | "disconnect") => {
+    setBackendIssue({ message, retry });
+  }, []);
+
   const emails = emailsForMode(emailMode, demoEmails, gmailEmails);
   const loading = emailMode === "gmail" ? gmailLoading : demoLoading;
   const error = emailMode === "gmail" ? gmailError : demoError;
   const lastLoadedAt = emailMode === "gmail" ? gmailScannedAt : demoLoadedAt;
   const reloadEmails = emailMode === "gmail" ? scanGmailEmails : reloadDemoEmails;
+  const showStartup = !minimumStartupElapsed || !startupComplete;
+  const showGmailDialog = !showStartup && !backendIssue && gmailStatusChecked &&
+    !gmailStatus?.connected && (gmailDialogRequested || !gmailDialogDismissed);
+
+  function dismissGmailDialog(useDemo = true) {
+    setGmailDialogDismissed(true);
+    setGmailDialogRequested(false);
+    if (useDemo) setEmailMode("demo");
+  }
 
   function navigate(page: AppPage) {
     // Close the mobile navigation menu.
@@ -173,6 +422,7 @@ function App() {
   const stats = calculateEmailStats(emails);
 
   return (
+    <>
     <div className="min-h-screen bg-[#f6f8fb] text-[#17213c]">
       <Sidebar
         isOpen={sidebarOpen}
@@ -200,6 +450,8 @@ function App() {
         ) : activePage === "settings" ? (
           <SettingsPage
             onOpenMenu={() => setSidebarOpen(true)}
+            onGmailStatusChange={onGmailStatusChange}
+            onBackendError={onSettingsBackendError}
           />
         ) : activePage === "help" ? (
           <HelpCenterPage
@@ -253,7 +505,7 @@ function App() {
                 <div className="mb-7 flex flex-wrap items-end justify-between gap-4">
                   <div>
                     <h2 className="text-[26px] font-bold tracking-tight text-[#17213c]">
-                      Good Afternoon John Doe,
+                      {greetingForTime(new Date(now))} John Doe,
                     </h2>
 
                     <p className="mt-1 text-sm text-[#747e93]">
@@ -266,38 +518,33 @@ function App() {
                   <div
                     role="status"
                     className={`flex items-center gap-2 text-xs font-semibold ${
-                      error
-                        ? "text-[#c03939]"
-                        : loading
-                          ? "text-[#818b9e]"
-                          : "text-[#277c58]"
+                      emailMode === "demo" || gmailStatus?.connected
+                        ? "text-[#277c58]"
+                        : gmailStatus?.state === "connecting"
+                          ? "text-[#a8782d]"
+                          : "text-[#a8782d]"
                     }`}
-                    title={
-                      error ??
-                      (emailMode === "gmail"
-                        ? "Live Gmail scan mode"
-                        : "Synthetic training mode")
-                    }
+                    title={emailMode === "gmail"
+                      ? gmailStatus?.connected
+                        ? `Connected to ${gmailStatus.email ?? "Gmail"}`
+                        : "Gmail account is not connected"
+                      : "Synthetic training mode"}
                   >
                     <span
                       aria-hidden="true"
                       className={`h-2.5 w-2.5 rounded-full ${
-                        error
-                          ? "bg-[#cf4545]"
-                          : loading
-                            ? "bg-[#e2ad4c]"
-                            : "bg-[#31a46c]"
+                        emailMode === "demo" || gmailStatus?.connected
+                          ? "bg-[#31a46c]"
+                          : "bg-[#e2ad4c]"
                       }`}
                     />
-                    {error
-                      ? "Offline · Connection failed"
-                      : loading
-                        ? "Connecting..."
-                        : emailMode === "gmail"
-                          ? lastLoadedAt === null
-                            ? "Gmail mode · Ready to scan"
-                            : "Gmail mode · Scan complete"
-                          : "Demo mode"}
+                    {emailMode === "demo"
+                      ? "Demo mode"
+                      : gmailStatus?.connected
+                        ? "Connected"
+                        : gmailStatus?.state === "connecting"
+                          ? "Connecting..."
+                          : "Not connected"}
                   </div>
                 </div>
 
@@ -388,6 +635,37 @@ function App() {
         )}
       </main>
     </div>
+
+    {showStartup ? (
+      <StartupScreen demoChecked={!demoLoading} gmailChecked={gmailStatusChecked} />
+    ) : backendIssue ? (
+      <ConnectionIssueDialog
+        key="backend"
+        kind="backend"
+        message={backendIssue.message}
+        busy={backendRetrying}
+        onRetry={() => { void retryBackend(); }}
+        onConnect={() => {}}
+        onSettings={() => {}}
+        onUseDemo={() => {}}
+      />
+    ) : showGmailDialog ? (
+      <ConnectionIssueDialog
+        key="gmail"
+        kind="gmail"
+        gmailStatus={gmailStatus}
+        message={gmailDialogError ?? undefined}
+        busy={gmailConnecting}
+        onRetry={() => {}}
+        onConnect={() => { void connectGmailFromDialog(); }}
+        onSettings={() => {
+          dismissGmailDialog(false);
+          navigate("settings");
+        }}
+        onUseDemo={() => dismissGmailDialog(true)}
+      />
+    ) : null}
+    </>
   );
 }
 

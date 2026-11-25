@@ -139,6 +139,9 @@ async function requestJson(
       // Keep the HTTP status if the error response is not JSON.
     }
 
+    if (response.status === 502 && !detail.includes("HTTP 502")) {
+      detail = `FastAPI returned HTTP 502. ${detail}`;
+    }
     throw new ApiError(detail, response.status);
   }
 

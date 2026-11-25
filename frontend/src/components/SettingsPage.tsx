@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 
 import {
+  ApiError,
   connectGmail,
   disconnectGmail,
   getGmailStatus,
@@ -38,7 +39,19 @@ import {
 
 type SettingsPageProps = {
   onOpenMenu: () => void;
+  onGmailStatusChange?: (status: GmailConnectionStatus) => void;
+  onBackendError?: (message: string, retry: "gmail-status" | "connect" | "disconnect") => void;
 };
+
+// Preserve the teammate's original Gmail error handling. A configured
+// FastAPI backend may still reject Gmail OAuth for Gmail-specific reasons.
+function isBackendUnavailable(error: unknown): error is ApiError {
+  return error instanceof ApiError && (
+    error.status === 0 ||
+    /^FastAPI returned HTTP \d+\.$/.test(error.message) ||
+    error.message === "FastAPI returned an invalid JSON response."
+  );
+}
 
 function SettingsSection({
   title,
@@ -121,6 +134,8 @@ function SettingToggle({
 
 function SettingsPage({
   onOpenMenu,
+  onGmailStatusChange,
+  onBackendError,
 }: SettingsPageProps) {
   // Preferences are saved locally, not to FastAPI.
   const [preferences, setPreferences] =
@@ -135,10 +150,17 @@ function SettingsPage({
 
     getGmailStatus(controller.signal)
       .then((status) => {
-        if (!controller.signal.aborted) setGmailStatus(status);
+        if (!controller.signal.aborted) {
+          setGmailStatus(status);
+          onGmailStatusChange?.(status);
+        }
       })
       .catch((error: unknown) => {
         if (!controller.signal.aborted) {
+          if (isBackendUnavailable(error) && onBackendError) {
+            onBackendError(error.message, "gmail-status");
+            return;
+          }
           setGmailUiError(
             error instanceof Error
               ? error.message
@@ -148,7 +170,7 @@ function SettingsPage({
       });
 
     return () => controller.abort();
-  }, []);
+  }, [onGmailStatusChange, onBackendError]);
 
   useEffect(() => {
     if (gmailStatus?.state !== "connecting") return;
@@ -159,6 +181,7 @@ function SettingsPage({
         .then((status) => {
           if (!controller.signal.aborted) {
             setGmailStatus(status);
+            onGmailStatusChange?.(status);
             if (status.state !== "connecting") {
               setGmailActionPending(false);
             }
@@ -167,6 +190,10 @@ function SettingsPage({
         .catch((error: unknown) => {
           if (!controller.signal.aborted) {
             setGmailActionPending(false);
+            if (isBackendUnavailable(error) && onBackendError) {
+              onBackendError(error.message, "gmail-status");
+              return;
+            }
             setGmailUiError(
               error instanceof Error
                 ? error.message
@@ -180,22 +207,28 @@ function SettingsPage({
       controller.abort();
       window.clearInterval(poll);
     };
-  }, [gmailStatus?.state]);
+  }, [gmailStatus?.state, onGmailStatusChange, onBackendError]);
 
   async function handleGmailAction() {
+    const disconnecting = Boolean(gmailStatus?.connected || gmailStatus?.state === "connecting");
     setGmailActionPending(true);
     setGmailUiError(null);
     try {
-      const status = gmailStatus?.connected || gmailStatus?.state === "connecting"
+      const status = disconnecting
         ? await disconnectGmail()
         : await connectGmail();
       setGmailStatus(status);
+      onGmailStatusChange?.(status);
     } catch (error) {
-      setGmailUiError(
-        error instanceof Error
-          ? error.message
-          : "The Gmail account action failed."
-      );
+      if (isBackendUnavailable(error) && onBackendError) {
+        onBackendError(error.message, disconnecting ? "disconnect" : "connect");
+      } else {
+        setGmailUiError(
+          error instanceof Error
+            ? error.message
+            : "The Gmail account action failed."
+        );
+      }
     } finally {
       setGmailActionPending(false);
     }

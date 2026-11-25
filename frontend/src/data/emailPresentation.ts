@@ -4,8 +4,8 @@ import type { Email } from "./mockEmails";
 export type EmailMode = "gmail" | "demo";
 
 export class GmailNotConnectedError extends Error {
-  constructor() {
-    super("Gmail is not connected. Connect an account from Settings, then scan again.");
+  constructor(message = "Gmail is not connected. Connect an account from Settings, then scan again.") {
+    super(message);
     this.name = "GmailNotConnectedError";
   }
 }
@@ -116,11 +116,11 @@ export async function loadConnectedGmailEmails(
   const status = await getStatus();
   if (!status.connected) {
     if (status.state === "connecting") {
-      throw new Error(
+      throw new GmailNotConnectedError(
         "Gmail authorization is still pending. Complete it in the browser, then scan again."
       );
     }
-    if (status.error) throw new Error(status.error);
+    if (status.error) throw new GmailNotConnectedError(status.error);
     throw new GmailNotConnectedError();
   }
   return getEmails();

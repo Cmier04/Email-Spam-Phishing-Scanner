@@ -421,7 +421,9 @@ function ScanResultsPage({
                       {loading
                         ? emailMode === "gmail" ? "Scanning recent Gmail messages." : "Fetching training examples from FastAPI."
                         : error
-                          ? error
+                          ? emailMode === "gmail"
+                            ? "Check the connection popup, or reconnect Gmail in Settings and retry."
+                            : "Check that FastAPI is running and retry the request."
                           : emailMode === "gmail" && !hasLoaded
                             ? "Select Scan emails in the top bar to retrieve recent inbox messages."
                             : emailMode === "gmail" && emails.length === 0

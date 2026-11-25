@@ -176,6 +176,9 @@ const parts: EmailPart[] = [
   "formatting",
 ];
 
+// Keep long message fragments readable without hiding their full contents.
+const FIELD_PREVIEW_LENGTH = 240;
+
 // Email components that can change the subject/body input of the classifier.
 const textInputParts: EmailPart[] = [
   "subject",
@@ -189,6 +192,7 @@ function SelectableField({
   selected,
   modified,
   highlighted,
+  expanded,
   onClick,
   children,
 }: {
@@ -196,15 +200,25 @@ function SelectableField({
   selected: boolean;
   modified: boolean;
   highlighted: boolean;
+  expanded: boolean;
   onClick: () => void;
   children: ReactNode;
 }) {
+  const text = String(children ?? "");
+  const characters = Array.from(text);
+  const isLong = characters.length > FIELD_PREVIEW_LENGTH;
+  const displayed = isLong && !expanded
+    ? `${characters.slice(0, FIELD_PREVIEW_LENGTH).join("").trimEnd()}…`
+    : text;
+
   return (
     <button
       type="button"
       onClick={onClick}
       aria-pressed={selected}
-      className={`block w-full rounded-lg border px-3 py-2.5 text-left transition focus-visible:outline-2 focus-visible:outline-[#3157d5] ${
+      aria-expanded={isLong ? expanded : undefined}
+      title={isLong ? (expanded ? "Click again to collapse" : selected ? "Click again to expand" : "Select, then click again to expand") : undefined}
+      className={`block w-full min-w-0 rounded-lg border px-3 py-2.5 text-left transition focus-visible:outline-2 focus-visible:outline-[#3157d5] ${
         highlighted ? "lab-field-flash" : ""
       } ${
         selected
@@ -226,11 +240,16 @@ function SelectableField({
 
       <CrossfadeContent
         as="span"
-        changeKey={`${selected ? "selected" : "unselected"}:${String(children)}`}
-        className="block whitespace-pre-line break-words text-sm leading-6 text-[#35415c]"
+        changeKey={`${selected ? "selected" : "unselected"}:${expanded ? "expanded" : "collapsed"}:${text}`}
+        className="block min-w-0 whitespace-pre-line break-words [overflow-wrap:anywhere] text-sm leading-6 text-[#35415c]"
       >
-        {children}
+        {displayed}
       </CrossfadeContent>
+      {isLong && selected && (
+        <span className="mt-1 block text-[10px] font-medium text-[#3157d5]">
+          {expanded ? "Click again to collapse" : "Click again to expand"}
+        </span>
+      )}
     </button>
   );
 }
@@ -243,6 +262,17 @@ function LearningLab({
 }: LearningLabProps) {
   const [selectedPart, setSelectedPart] =
     useState<EmailPart>("subject");
+  // A selected field expands on its next click; clicking it again collapses it.
+  const [expandedPart, setExpandedPart] = useState<EmailPart | null>(null);
+
+  function handlePartClick(part: EmailPart) {
+    if (part !== selectedPart) {
+      setSelectedPart(part);
+      setExpandedPart(null);
+      return;
+    }
+    setExpandedPart((current) => current === part ? null : part);
+  }
 
   // Only confirmed changes are stored; the original email prop never changes.
   const [changes, setChanges] = useState<
@@ -847,7 +877,7 @@ function LearningLab({
                   Stage 1 · Explore
                 </p>
                 <p className="mt-1 text-[11px] text-[#a0a7b5]">
-                  Choose an email component below
+                  Choose a component; click it again to expand or collapse long text
                 </p>
               </div>
               <span className="rounded-full bg-[#e9f7f0] px-2.5 py-1 text-[10px] font-bold text-[#277c58]">
@@ -874,7 +904,8 @@ function LearningLab({
                     selected={selectedPart === part}
                     modified={Boolean(changes[part])}
                     highlighted={recentlyChangedPart === part}
-                    onClick={() => setSelectedPart(part)}
+                    expanded={expandedPart === part}
+                    onClick={() => handlePartClick(part)}
                   >
                     {part === "formatting"
                       ? `Current layout: ${spacing}`

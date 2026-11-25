@@ -38,7 +38,7 @@ function Header({
 
   // The relative timestamp updates while the page is open.
   useEffect(() => {
-    if (connectionFailed || loading || lastLoadedAt === null) return;
+    if (lastLoadedAt === null) return;
 
     const interval = window.setInterval(
       () => setNow(Date.now()),
@@ -46,7 +46,7 @@ function Header({
     );
 
     return () => window.clearInterval(interval);
-  }, [connectionFailed, loading, lastLoadedAt]);
+  }, [lastLoadedAt]);
 
   function relativeTime(timestamp: number): string {
     const seconds = Math.max(
@@ -121,7 +121,6 @@ function Header({
           role="status"
           title={
             !connectionFailed &&
-            !loading &&
             lastLoadedAt !== null
               ? `${emailMode === "gmail" ? "Gmail scan" : "Demo results"} last loaded: ${new Date(lastLoadedAt).toLocaleString()}.`
               : error ?? undefined
@@ -129,18 +128,11 @@ function Header({
           className={`hidden items-center gap-2 rounded-lg border px-3 py-2 text-xs md:flex ${
             connectionFailed
               ? "border-[#f1c9c9] bg-[#fff4f4] text-[#c03939]"
-              : loading
-                ? "border-[#e0e5ed] text-[#626d82]"
-                : "border-[#d8ebdf] bg-[#f4fbf6] text-[#277c58]"
+              : "border-[#d8ebdf] bg-[#f4fbf6] text-[#277c58]"
           }`}
         >
           {connectionFailed ? (
             <AlertCircle size={14} />
-          ) : loading ? (
-            <LoaderCircle
-              size={14}
-              className="animate-spin"
-            />
           ) : (
             <Clock3 size={14} />
           )}
@@ -148,11 +140,9 @@ function Header({
           <span>
             {connectionFailed
               ? "Connection failed"
-              : loading
-                ? emailMode === "gmail" ? "Scanning..." : "Loading demo..."
-                : lastLoadedAt === null
-                  ? emailMode === "gmail" ? "No Gmail scan yet" : "Demo not loaded"
-                  : `${emailMode === "gmail" ? "Last scanned" : "Demo loaded"}: ${relativeTime(lastLoadedAt)}`}
+              : lastLoadedAt === null
+                ? emailMode === "gmail" ? "Last scanned: never" : "Demo not loaded"
+                : `${emailMode === "gmail" ? "Last scanned" : "Demo loaded"}: ${relativeTime(lastLoadedAt)}`}
           </span>
         </div>
 
