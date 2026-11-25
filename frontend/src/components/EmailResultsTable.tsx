@@ -7,6 +7,7 @@ type EmailFilter = "All emails" | Email["classification"];
 
 type EmailResultsTableProps = {
   emails: Email[];
+  loading?: boolean;
   onSelect: (email: Email) => void;
   onViewAll: () => void;
 };
@@ -31,9 +32,11 @@ const riskStyles: Record<Email["risk"], string> = {
   High: "bg-[#ffebe7] text-[#b8493b]",
 };
 
-function EmailResultsTable({ emails, onSelect, onViewAll }: EmailResultsTableProps) {
+function EmailResultsTable({ emails, loading = false, onSelect, onViewAll }: EmailResultsTableProps) {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<EmailFilter>("All emails");
+
+  const showSkeleton = loading && emails.length === 0;
 
   // Display only emails that match the selected filter and search.
   const matchingEmails = emails.filter((email) => {
@@ -55,7 +58,7 @@ function EmailResultsTable({ emails, onSelect, onViewAll }: EmailResultsTablePro
   const visibleEmails = matchingEmails.slice(0, 6);
 
   return (
-    <section className="overflow-hidden rounded-2xl border border-[#e1e6ee] bg-white shadow-sm">
+    <section aria-busy={showSkeleton} className="overflow-hidden rounded-2xl border border-[#e1e6ee] bg-white shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[#e7eaf0] px-5 py-5 md:px-6">
         <div>
           <h2 className="text-base font-bold text-[#202a44]">
@@ -129,15 +132,34 @@ function EmailResultsTable({ emails, onSelect, onViewAll }: EmailResultsTablePro
           </thead>
 
           <tbody>
-            {visibleEmails.map((email) => {
+            {showSkeleton && Array.from({ length: 4 }, (_, index) => (
+              <tr key={`loading-${index}`} aria-hidden="true" className="border-b border-[#eef0f4] last:border-0">
+                <td className="px-6 py-4">
+                  <div className="flex items-center gap-3">
+                    <span className="phishlab-skeleton h-8 w-8 shrink-0 rounded-lg" />
+                    <span className="space-y-2">
+                      <span className="phishlab-skeleton block h-3 w-24 rounded" />
+                      <span className="phishlab-skeleton block h-2 w-32 rounded" />
+                    </span>
+                  </div>
+                </td>
+                <td className="px-4 py-4"><span className="phishlab-skeleton block h-3 w-40 rounded" /></td>
+                <td className="px-4 py-4"><span className="phishlab-skeleton block h-5 w-24 rounded-full" /></td>
+                <td className="px-4 py-4"><span className="phishlab-skeleton block h-2 w-20 rounded-full" /></td>
+                <td className="px-4 py-4"><span className="phishlab-skeleton block h-5 w-12 rounded" /></td>
+                <td className="px-4 py-4"><span className="phishlab-skeleton block h-4 w-4 rounded" /></td>
+              </tr>
+            ))}
+            {!showSkeleton && visibleEmails.map((email, index) => {
               const legitimate =
                 email.classification === "Legitimate";
 
               return (
                 <tr
-                  key={email.id}
+                  key={`${email.id}-${filter}-${search.trim().toLowerCase()}`}
+                  style={{ animationDelay: `${Math.min(index, 5) * 25}ms` }}
                   onClick={() => onSelect(email)}
-                  className="group cursor-pointer border-b border-[#eef0f4] transition-colors duration-150 hover:bg-[#f2f4f7] last:border-0"
+                  className="phishlab-table-row-enter group cursor-pointer border-b border-[#eef0f4] transition-colors duration-150 hover:bg-[#f2f4f7] last:border-0"
                 >
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3">
@@ -151,7 +173,6 @@ function EmailResultsTable({ emails, onSelect, onViewAll }: EmailResultsTablePro
                         <p className="text-xs font-semibold text-[#2b354f]">
                           {email.sender}
                         </p>
-
                         <p className="mt-1 max-w-[170px] truncate text-[10px] text-[#939baa]">
                           {email.email}
                         </p>
@@ -163,7 +184,6 @@ function EmailResultsTable({ emails, onSelect, onViewAll }: EmailResultsTablePro
                     <p className="truncate text-xs font-medium text-[#3b465e]">
                       {email.subject}
                     </p>
-
                     <p className="mt-1 text-[10px] text-[#99a0af]">
                       {email.time}
                     </p>
@@ -229,12 +249,11 @@ function EmailResultsTable({ emails, onSelect, onViewAll }: EmailResultsTablePro
           </tbody>
         </table>
 
-        {visibleEmails.length === 0 && (
+        {!showSkeleton && visibleEmails.length === 0 && (
           <div className="py-12 text-center">
             <p className="text-sm font-semibold text-[#4c566c]">
               No matching emails
             </p>
-
             <p className="mt-1 text-xs text-[#9198a8]">
               Try changing your search or filter.
             </p>
@@ -243,7 +262,9 @@ function EmailResultsTable({ emails, onSelect, onViewAll }: EmailResultsTablePro
       </div>
 
       <div className="border-t border-[#e9ecf1] px-6 py-4 text-[11px] text-[#8a92a4]">
-        Showing {visibleEmails.length} of {matchingEmails.length} matching emails ({emails.length} total)
+        {showSkeleton
+          ? "Loading emails..."
+          : `Showing ${visibleEmails.length} of ${matchingEmails.length} matching emails (${emails.length} total)`}
       </div>
     </section>
   );

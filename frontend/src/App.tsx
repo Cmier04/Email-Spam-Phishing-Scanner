@@ -18,6 +18,8 @@ import HelpCenterPage from "./components/HelpCenterPage";
 
 import { getDemoEmails } from "./api";
 import type { Email } from "./data/mockEmails";
+import { withHeaderCrossfade } from "./data/headerCrossfade";
+import "./animations.css";
 
 function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -77,30 +79,35 @@ function App() {
     return () => controller.abort();
   }, [reloadCount]);
 
-function navigate(page: AppPage) {
-  // Close the mobile navigation menu.
-  setSidebarOpen(false);
+  function navigate(page: AppPage) {
+    // Close the mobile navigation menu.
+    setSidebarOpen(false);
 
-  // Clicking the page you're already on toggles the sidebar.
-  if (page === activePage && selectedEmail === null) {
-    if (window.matchMedia("(min-width: 1024px)").matches) {
-      setSidebarCollapsed((collapsed) => !collapsed);
+    // Clicking the page you're already on toggles the sidebar.
+    if (page === activePage && selectedEmail === null) {
+      if (window.matchMedia("(min-width: 1024px)").matches) {
+        setSidebarCollapsed((collapsed) => !collapsed);
+      }
+
+      return;
     }
 
-    return;
-  }
-
-  // Navigate to another page without changing
-  // whether the sidebar is collapsed or expanded.
-  setActivePage(page);
-  setSelectedEmail(null);
-  window.scrollTo(0, 0);
-}
-
-  function openEmail(email: Email) {
-    setSelectedEmail(email);
+    // Navigate to another page without changing
+    // whether the sidebar is collapsed or expanded.
+    withHeaderCrossfade(() => {
+      setActivePage(page);
+      setSelectedEmail(null);
+    });
     window.scrollTo(0, 0);
   }
+
+  function openEmail(email: Email) {
+    withHeaderCrossfade(() => setSelectedEmail(email));
+    window.scrollTo(0, 0);
+  }
+
+  // Keep existing results visible during refresh; skeletons are only for the first load.
+  const showInitialSkeletons = loading && emails.length === 0;
 
   // Statistics are calculated from returned emails.
   const legitimateCount = emails.filter(
@@ -133,6 +140,7 @@ function navigate(page: AppPage) {
 
       {/* Main content adjusts when the sidebar collapses. */}
       <main
+        key={selectedEmail ? `email-${selectedEmail.id}` : activePage}
         className={`min-h-screen transition-[margin-left] duration-300 ${
           sidebarCollapsed
             ? "lg:ml-[72px]"
@@ -142,7 +150,7 @@ function navigate(page: AppPage) {
         {selectedEmail ? (
           <EmailDetail
             email={selectedEmail}
-            onBack={() => setSelectedEmail(null)}
+            onBack={() => withHeaderCrossfade(() => setSelectedEmail(null))}
             onOpenMenu={() => setSidebarOpen(true)}
           />
         ) : activePage === "settings" ? (
@@ -182,7 +190,7 @@ function navigate(page: AppPage) {
                 onSelect={openEmail}
               />
             ) : (
-              <div className="mx-auto max-w-[1280px] px-5 py-7 md:px-8 md:py-9">
+              <div className="phishlab-dashboard-stagger mx-auto max-w-[1280px] px-5 py-7 md:px-8 md:py-9">
                 {/* Dashboard welcome section */}
                 <div className="mb-7 flex flex-wrap items-end justify-between gap-4">
                   <div>
@@ -230,43 +238,62 @@ function navigate(page: AppPage) {
                 {/* Statistics from the loaded synthetic emails. */}
                 <section
                   aria-label="Email statistics"
-                  className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4"
+                  className="phishlab-dashboard-metrics mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4"
                 >
-                  <MetricCard
-                    label="Emails scanned"
-                    value={String(emails.length)}
-                    note="synthetic examples"
-                    icon={Inbox}
-                    color="blue"
-                  />
+                  {showInitialSkeletons ? (
+                    Array.from({ length: 4 }, (_, index) => (
+                      <div
+                        key={index}
+                        aria-hidden="true"
+                        className="rounded-2xl border border-[#e2e6ed] bg-white p-5 shadow-sm"
+                      >
+                        <div className="mb-5 flex items-start justify-between">
+                          <span className="phishlab-skeleton h-3 w-24 rounded" />
+                          <span className="phishlab-skeleton h-8 w-8 rounded-lg" />
+                        </div>
+                        <div className="phishlab-skeleton h-8 w-16 rounded" />
+                        <div className="phishlab-skeleton mt-3 h-2.5 w-28 rounded" />
+                      </div>
+                    ))
+                  ) : (
+                    <>
+                      <MetricCard
+                        label="Emails scanned"
+                        value={String(emails.length)}
+                        note="synthetic examples"
+                        icon={Inbox}
+                        color="blue"
+                      />
 
-                  <MetricCard
-                    label="Legitimate"
-                    value={String(legitimateCount)}
-                    note="model classifications"
-                    icon={CircleCheck}
-                    color="green"
-                  />
+                      <MetricCard
+                        label="Legitimate"
+                        value={String(legitimateCount)}
+                        note="model classifications"
+                        icon={CircleCheck}
+                        color="green"
+                      />
 
-                  <MetricCard
-                    label="Potential threats"
-                    value={String(threatCount)}
-                    note="model classifications"
-                    icon={TriangleAlert}
-                    color="red"
-                  />
+                      <MetricCard
+                        label="Potential threats"
+                        value={String(threatCount)}
+                        note="model classifications"
+                        icon={TriangleAlert}
+                        color="red"
+                      />
 
-                  <MetricCard
-                    label="Avg. confidence"
-                    value={
-                      meanConfidence === null
-                        ? "—"
-                        : `${meanConfidence}%`
-                    }
-                    note="among loaded examples"
-                    icon={ShieldCheck}
-                    color="violet"
-                  />
+                      <MetricCard
+                        label="Avg. confidence"
+                        value={
+                          meanConfidence === null
+                            ? "—"
+                            : `${meanConfidence}%`
+                        }
+                        note="among loaded examples"
+                        icon={ShieldCheck}
+                        color="violet"
+                      />
+                    </>
+                  )}
                 </section>
 
                 {loading && (
@@ -280,6 +307,7 @@ function navigate(page: AppPage) {
 
                 <EmailResultsTable
                   emails={emails}
+                  loading={loading}
                   onSelect={openEmail}
                   onViewAll={() => navigate("results")}
                 />
