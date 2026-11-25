@@ -7,6 +7,7 @@ import {
   Menu,
   RefreshCw,
 } from "lucide-react";
+import type { EmailMode } from "../data/emailPresentation";
 
 type HeaderProps = {
   onOpenMenu: () => void;
@@ -14,6 +15,8 @@ type HeaderProps = {
   error: string | null;
   onRetry: () => void;
   lastLoadedAt: number | null;
+  emailMode: EmailMode;
+  onEmailModeChange: (mode: EmailMode) => void;
   title?: string;
   subtitle?: string;
 };
@@ -24,6 +27,8 @@ function Header({
   error,
   onRetry,
   lastLoadedAt,
+  emailMode,
+  onEmailModeChange,
   title = "Dashboard",
   subtitle = "Monitor and protect your inbox",
 }: HeaderProps) {
@@ -89,6 +94,28 @@ function Header({
       </div>
 
       <div className="flex items-center gap-3">
+        <div
+          aria-label="Email data mode"
+          className="flex rounded-lg bg-[#f0f2f6] p-1"
+        >
+          {(["gmail", "demo"] as const).map((mode) => (
+            <button
+              key={mode}
+              type="button"
+              aria-pressed={emailMode === mode}
+              onClick={() => onEmailModeChange(mode)}
+              disabled={loading}
+              className={`rounded-md px-2.5 py-1.5 text-[10px] font-semibold transition disabled:cursor-wait disabled:opacity-60 sm:px-3 sm:text-[11px] ${
+                emailMode === mode
+                  ? "bg-white text-[#28334f] shadow-sm"
+                  : "text-[#788197] hover:text-[#3157d5]"
+              }`}
+            >
+              {mode === "gmail" ? "Gmail inbox" : "Training demo"}
+            </button>
+          ))}
+        </div>
+
         {/* Connection status */}
         <div
           role="status"
@@ -96,7 +123,7 @@ function Header({
             !connectionFailed &&
             !loading &&
             lastLoadedAt !== null
-              ? `Demo results last loaded: ${new Date(lastLoadedAt).toLocaleString()}. Gmail scanning is not connected.`
+              ? `${emailMode === "gmail" ? "Gmail scan" : "Demo results"} last loaded: ${new Date(lastLoadedAt).toLocaleString()}.`
               : error ?? undefined
           }
           className={`hidden items-center gap-2 rounded-lg border px-3 py-2 text-xs md:flex ${
@@ -122,31 +149,29 @@ function Header({
             {connectionFailed
               ? "Connection failed"
               : loading
-                ? "Connecting..."
+                ? emailMode === "gmail" ? "Scanning..." : "Loading demo..."
                 : lastLoadedAt === null
-                  ? "No scan yet"
-                  : `Last scanned: ${relativeTime(lastLoadedAt)}`}
+                  ? emailMode === "gmail" ? "No Gmail scan yet" : "Demo not loaded"
+                  : `${emailMode === "gmail" ? "Last scanned" : "Demo loaded"}: ${relativeTime(lastLoadedAt)}`}
           </span>
         </div>
 
-        {/* Turns red and becomes clickable if the API fails. */}
-        {/* Gmail scanning is not enabled. */}
         <button
           type="button"
           onClick={onRetry}
-          disabled={!connectionFailed || loading}
+          disabled={loading}
           title={
             error ??
             (loading
-              ? "Connecting to FastAPI"
-              : "Gmail scanning is not available yet")
+              ? emailMode === "gmail" ? "Scanning Gmail" : "Loading training demo"
+              : emailMode === "gmail" ? "Scan recent Gmail messages" : "Reload training demo")
           }
           className={`flex items-center gap-2 rounded-lg px-4 py-2.5 text-xs font-semibold text-white transition ${
             connectionFailed
               ? "bg-[#c63d3d] hover:bg-[#a92c2c]"
               : loading
                 ? "cursor-wait bg-[#8294c9]"
-                : "cursor-not-allowed bg-[#3157d5] opacity-60"
+                : "bg-[#3157d5] hover:bg-[#294ac0]"
           }`}
         >
           {loading ? (
@@ -160,10 +185,10 @@ function Header({
 
           <span>
             {connectionFailed
-              ? "Retry connection"
+              ? emailMode === "gmail" ? "Retry scan" : "Retry demo"
               : loading
-                ? "Connecting..."
-                : "Scan emails"}
+                ? emailMode === "gmail" ? "Scanning..." : "Loading..."
+                : emailMode === "gmail" ? "Scan emails" : "Reload demo"}
           </span>
         </button>
       </div>

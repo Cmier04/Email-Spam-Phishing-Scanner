@@ -99,7 +99,7 @@ function EmailDetail({
                   </p>
 
                   <p className="mt-1 text-xs text-[#9ba2b1]">
-                    Example email · {email.time}
+                    {email.source === "gmail" ? "Gmail message" : "Training example"} · {email.time}
                   </p>
                 </div>
               </div>
@@ -107,11 +107,13 @@ function EmailDetail({
 
             {/* Displayed message is read-only. */}
             <div className="p-6 md:p-8">
-              <p className="mb-5 text-[15px] leading-7 text-[#39445d]">
-                {email.greeting ?? "Hello,"}
-              </p>
+              {email.greeting && (
+                <p className="mb-5 text-[15px] leading-7 text-[#39445d]">
+                  {email.greeting}
+                </p>
+              )}
 
-              <p className="mb-5 whitespace-pre-line text-[15px] leading-7 text-[#39445d]">
+              <p className="mb-5 whitespace-pre-wrap break-words text-[15px] leading-7 text-[#39445d]">
                 {email.body ?? email.preview}
               </p>
 

@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 
 import type { Email } from "../data/mockEmails";
+import type { EmailMode } from "../data/emailPresentation";
 import AnimatedNumber from "./AnimatedNumber";
 
 type ClassificationFilter = "All" | Email["classification"];
@@ -23,6 +24,8 @@ type ScanResultsPageProps = {
   emails: Email[];
   loading: boolean;
   error: string | null;
+  emailMode: EmailMode;
+  hasLoaded: boolean;
   onSelect: (email: Email) => void;
 };
 
@@ -55,6 +58,8 @@ function ScanResultsPage({
   emails,
   loading,
   error,
+  emailMode,
+  hasLoaded,
   onSelect,
 }: ScanResultsPageProps) {
   const [search, setSearch] = useState("");
@@ -202,7 +207,9 @@ function ScanResultsPage({
                 <span aria-label="Loading" className="phishlab-skeleton inline-block h-7 w-16 rounded" />
               ) : <AnimatedNumber value={emails.length.toLocaleString()} />}
             </span>
-            <span className="text-[11px] font-medium text-[#959eb2]">Current demo batch</span>
+            <span className="text-[11px] font-medium text-[#959eb2]">
+              {emailMode === "gmail" ? "Current Gmail scan" : "Current demo batch"}
+            </span>
           </div>
         </div>
 
@@ -251,7 +258,9 @@ function ScanResultsPage({
           <div>
             <h3 className="text-base font-bold text-[#202a44]">Email classifications</h3>
             <p className="mt-1 text-xs text-[#8a92a4]">
-              Current results come from FastAPI's synthetic demo endpoint, not saved Gmail scan history.
+              {emailMode === "gmail"
+                ? "Current results are recent Gmail messages classified by the local model."
+                : "Current results are synthetic training messages from FastAPI's demo endpoint."}
             </p>
           </div>
           <span className="rounded-full bg-[#eef2ff] px-3 py-1.5 text-[11px] font-semibold text-[#3157d5]">
@@ -398,10 +407,26 @@ function ScanResultsPage({
                 <tr>
                   <td colSpan={6} className="px-6 py-14 text-center">
                     <p className="text-sm font-semibold text-[#4c566c]">
-                      {loading ? "Loading scan results..." : error ? "Results unavailable" : "No matching emails"}
+                      {loading
+                        ? "Loading scan results..."
+                        : error
+                          ? "Results unavailable"
+                          : emailMode === "gmail" && !hasLoaded
+                            ? "No Gmail scan yet"
+                            : emailMode === "gmail" && emails.length === 0
+                              ? "No Gmail messages found"
+                              : "No matching emails"}
                     </p>
                     <p className="mt-1 text-xs text-[#9198a8]">
-                      {loading ? "Fetching examples from FastAPI." : error ? "Connection failed. Use Retry connection in the top bar." : "Try changing the filters or your search."}
+                      {loading
+                        ? emailMode === "gmail" ? "Scanning recent Gmail messages." : "Fetching training examples from FastAPI."
+                        : error
+                          ? error
+                          : emailMode === "gmail" && !hasLoaded
+                            ? "Select Scan emails in the top bar to retrieve recent inbox messages."
+                            : emailMode === "gmail" && emails.length === 0
+                              ? "The recent inbox query returned no messages."
+                              : "Try changing the filters or your search."}
                     </p>
                     {!loading && !error && (search || classification !== "All") && (
                       <button type="button" onClick={clearFilters} className="mt-3 text-xs font-semibold text-[#3157d5] hover:underline">
@@ -422,7 +447,9 @@ function ScanResultsPage({
                 ? "Loading scan results..."
                 : `Showing ${filteredEmails.length ? startIndex + 1 : 0}–${Math.min(startIndex + PAGE_SIZE, filteredEmails.length)} of ${filteredEmails.length} results`}
             </p>
-            <p className="mt-1 text-[10px] text-[#9aa2b2]">Classification and confidence come from the local model. Data is synthetic.</p>
+            <p className="mt-1 text-[10px] text-[#9aa2b2]">
+              Classification and confidence come from the local model. {emailMode === "gmail" ? "Data comes from the connected Gmail inbox." : "Data is synthetic."}
+            </p>
           </div>
           <div className="flex items-center gap-2">
             <button
