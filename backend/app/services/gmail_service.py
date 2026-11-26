@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import binascii
+import json
 from email.header import decode_header, make_header
 from email.utils import parseaddr
 from html import unescape
@@ -80,7 +81,7 @@ def _gmail_imports() -> dict[str, Any]:
         from googleapiclient.discovery import build
     except ImportError as exc:
         raise GmailConfigurationError(
-            "Gmail API dependencies are not installed."
+            "Google sign-in support is missing from this installation (google-auth-oauthlib or Google API libraries). Rebuild PhishLab with backend requirements installed."
         ) from exc
 
     return {
@@ -91,6 +92,60 @@ def _gmail_imports() -> dict[str, Any]:
         "InstalledAppFlow": InstalledAppFlow,
         "build": build,
     }
+
+
+def configure_gmail_oauth_client(configuration: Any) -> dict[str, Any]:
+    """Import a Google *Desktop application* OAuth client, never a user token.
+
+    Only a trusted local caller can access the API route. The server validates the
+    client metadata and writes an owner-only file atomically, without logging IDs,
+    secrets or the document. A token is never accepted as an OAuth client.
+    """
+    if not isinstance(configuration, dict) or set(configuration) != {"installed"}:
+        raise GmailConfigurationError(
+            "Select the Desktop application OAuth client JSON downloaded from Google Cloud."
+        )
+    installed = configuration.get("installed")
+    if not isinstance(installed, dict):
+        raise GmailConfigurationError("Invalid Desktop OAuth client JSON.")
+    for name in ("client_id", "client_secret", "auth_uri", "token_uri"):
+        value = installed.get(name)
+        if not isinstance(value, str) or not value or len(value) > 2048:
+            raise GmailConfigurationError(f"Invalid Desktop OAuth client: missing {name}.")
+    if not installed["client_id"].endswith(".apps.googleusercontent.com"):
+        raise GmailConfigurationError("This file is not a Google OAuth Desktop client.")
+    if (urlsplit(installed["auth_uri"]).scheme != "https" or
+        urlsplit(installed["auth_uri"]).hostname != "accounts.google.com" or
+        installed["token_uri"] != "https://oauth2.googleapis.com/token"):
+        raise GmailConfigurationError("Unexpected Google OAuth authorization endpoints.")
+    if TOKEN_PATH.exists():
+        raise GmailConfigurationError("Disconnect Gmail before changing its OAuth client.")
+    with _connection_lock:
+        if _connection_status["state"] == "connecting":
+            raise GmailConfigurationError("Wait for Gmail authorization to finish before changing its OAuth client.")
+    with _credentials_lock:
+        temporary_path = None
+        try:
+            CREDENTIALS_PATH.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+            descriptor, temporary_name = tempfile.mkstemp(
+                prefix=f".{CREDENTIALS_PATH.name}.", suffix=".tmp", dir=CREDENTIALS_PATH.parent
+            )
+            temporary_path = Path(temporary_name)
+            with os.fdopen(descriptor, "w", encoding="utf-8") as output:
+                json.dump(configuration, output, ensure_ascii=True)
+                output.flush()
+                os.fsync(output.fileno())
+            temporary_path.replace(CREDENTIALS_PATH)
+            if os.name == "posix":
+                CREDENTIALS_PATH.chmod(0o600)
+        except OSError as exc:
+            raise GmailConfigurationError(
+                "Cannot save Google OAuth configuration in the application-data folder."
+            ) from exc
+        finally:
+            if temporary_path is not None:
+                temporary_path.unlink(missing_ok=True)
+    return get_gmail_connection_status()
 
 
 def _save_credentials(credentials: Any) -> None:
@@ -364,7 +419,7 @@ def connect_gmail_account() -> dict[str, Any]:
     global _connection_attempt_id
 
     if not CREDENTIALS_PATH.is_file():
-        raise GmailConfigurationError("Gmail OAuth credentials are not configured.")
+        raise GmailConfigurationError("Google OAuth Desktop credentials are not configured. Import your OAuth client JSON in Settings → Gmail.")
 
     current = get_gmail_connection_status()
     if current["connected"] or current["state"] == "connecting":

@@ -22,6 +22,7 @@ import {
   connectGmail,
   disconnectGmail,
   getGmailStatus,
+  importGmailOAuthClient,
   type GmailConnectionStatus,
 } from "../api";
 
@@ -232,6 +233,21 @@ function SettingsPage({
     }
   }
 
+  async function handleOauthClientFile(file: File | undefined) {
+    if (!file) return;
+    setGmailActionPending(true);
+    setGmailUiError(null);
+    try {
+      const status = await importGmailOAuthClient(file);
+      setGmailStatus(status);
+      onGmailStatusChange?.(status);
+    } catch (error) {
+      setGmailUiError(error instanceof Error ? error.message : "Could not import the Google OAuth client JSON.");
+    } finally {
+      setGmailActionPending(false);
+    }
+  }
+
   function updatePreferences(next: SettingsPreferences) {
     setPreferences(next);
     saveSettings(next);
@@ -340,9 +356,23 @@ function SettingsPage({
                   )}
 
                   {gmailStatus && !gmailStatus.credentials_configured && (
-                    <p className="mt-1 text-[11px] text-[#9a6a16]">
-                      Gmail OAuth credentials are not configured in the backend.
-                    </p>
+                    <div className="mt-3 space-y-2 rounded-lg border border-[#f1e2bf] bg-[#fffaf0] p-3">
+                      <p className="text-[11px] leading-5 text-[#805e17]">
+                        Google OAuth Desktop credentials are missing. Import the <strong>Desktop application</strong>
+                        OAuth client JSON from Google Cloud to connect Gmail. Installing google-auth-oauthlib
+                        alone does not create this client file. If your PhishLab installer includes the client,
+                        no manual import should be needed.
+                      </p>
+                      <label className="inline-flex cursor-pointer items-center rounded-lg border border-[#d9e1f2] bg-white px-3 py-2 text-[11px] font-semibold text-[#3157d5] hover:bg-[#f3f6ff]">
+                        Import Desktop OAuth JSON
+                        <input type="file" accept=".json,application/json" className="sr-only"
+                          disabled={gmailActionPending}
+                          onChange={(event) => {
+                            void handleOauthClientFile(event.currentTarget.files?.[0]);
+                            event.currentTarget.value = "";
+                          }} />
+                      </label>
+                    </div>
                   )}
                 </div>
               </div>

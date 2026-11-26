@@ -1,19 +1,63 @@
+# macOS
 .DS_Store
-backend/venv/
-__pycache__/
-*.pyc
-*.py[cod]
 
-# Gmail credentials
-backend/.env
+# Python virtual environments
+.venv/
+venv/
+backend/venv/
+
+# Python cache
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+
+# Local AI configuration
+backend/.local-ai-runtime.json
+backend/.local-ai-settings.json
+
+# AI models (do not upload to GitHub)
+backend/model/*.gguf
+backend/model/*.pkl
+backend/model/*.bin
+backend/model/*.safetensors
+
+# Gmail OAuth credentials
 backend/credentials.json
 backend/token.json*
+backend/.env
 
-# Node dependencies (large files)
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+
+# SQLite databases
+*.db
+*.sqlite
+*.sqlite3
+*.db-shm
+*.db-wal
+
+# Node dependencies
 node_modules/
-**/node_modules/
-frontend/node_modules/
-dist/
-build/
-release/
 
+# Frontend build
+frontend/dist/
+frontend/build/
+*.tsbuildinfo
+
+# Electron and PyInstaller generated files
+desktop/build-backend/
+desktop/dist-backend/
+desktop/release-assets/
+release/
+build/
+dist/
+
+# Generated evaluation output
+backend/evaluation_results/
+
+# Logs
+*.log
+npm-debug.log*

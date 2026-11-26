@@ -38,12 +38,29 @@ function getBackendLaunch({ isPackaged, root, resourcesPath, userData, port, env
     command = binary;
     args = [];
     cwd = path.dirname(binary);
+    // The build includes one native llama.cpp backend. Read the build-time
+    // manifest rather than assuming CUDA is available on every Windows PC.
+    const runtimeManifest = path.join(resourcesPath, "ai-runtime.json");
+    if (!config.PHISHLAB_BUNDLED_AI_BACKEND && fs.existsSync(runtimeManifest)) {
+      try {
+        const { backend } = JSON.parse(fs.readFileSync(runtimeManifest, "utf8"));
+        if (["cpu", "metal", "cuda", "vulkan"].includes(backend)) {
+          config.PHISHLAB_BUNDLED_AI_BACKEND = backend;
+        }
+      } catch { /* Missing/invalid hint: backend uses conservative detection. */ }
+    }
     const models = path.join(userData, "models");
     fs.mkdirSync(models, { recursive: true, mode: 0o700 });
     // Explicit user environment variables are retained, including the MySQL URL.
     const bundledOAuth = path.join(resourcesPath, "google", "credentials.json");
-    config.PHISHLAB_GMAIL_CREDENTIALS_PATH ||= fs.existsSync(path.join(userData, "credentials.json"))
-      ? path.join(userData, "credentials.json") : bundledOAuth;
+    const userOAuth = path.join(userData, "credentials.json");
+    // Packaged resources are read-only on some platforms. Importing a Desktop
+    // client from Settings must always write to the per-user data directory.
+    if (!config.PHISHLAB_GMAIL_CREDENTIALS_PATH && !fs.existsSync(userOAuth) && fs.existsSync(bundledOAuth)) {
+      fs.copyFileSync(bundledOAuth, userOAuth, fs.constants.COPYFILE_EXCL);
+      if (process.platform !== "win32") fs.chmodSync(userOAuth, 0o600);
+    }
+    config.PHISHLAB_GMAIL_CREDENTIALS_PATH ||= userOAuth;
     config.PHISHLAB_GMAIL_TOKEN_PATH ||= path.join(userData, "token.json");
     config.PHISHLAB_AI_SETTINGS_PATH ||= path.join(userData, "ai-settings.json");
     for (const [envName, filename] of [["PHISHLAB_CLASSIFIER_MODEL_PATH", "email_classifier.pkl"], ["PHISHLAB_LOCAL_AI_MODEL_PATH", "summary-qwen.gguf"]]) {

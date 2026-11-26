@@ -148,3 +148,52 @@ test("packaged app prefers user model overrides when they exist", () => {
     assert.equal(result.env.PHISHLAB_LOCAL_AI_MODEL_PATH, model);
   } finally { fs.rmSync(root, {recursive: true, force:true}); }
 });
+
+test("packaged Google OAuth Desktop client is provisioned into writable user data", () => {
+  const root = tmp();
+  try {
+    const resourcesPath = path.join(root, "resources");
+    const userData = path.join(root, "user data");
+    const binary = path.join(resourcesPath, "backend", process.platform === "win32" ? "phislab-backend.exe" : "phislab-backend");
+    const bundled = path.join(resourcesPath, "google", "credentials.json");
+    fs.mkdirSync(path.dirname(binary), { recursive: true });
+    fs.mkdirSync(path.dirname(bundled), { recursive: true });
+    fs.writeFileSync(binary, "bundled backend");
+    fs.writeFileSync(bundled, '{"installed":{"client_id":"example.apps.googleusercontent.com"}}');
+    const args = { isPackaged: true, root, resourcesPath, userData, port: 18001, env: {} };
+    const first = getBackendLaunch(args);
+    assert.equal(first.env.PHISHLAB_GMAIL_CREDENTIALS_PATH, path.join(userData, "credentials.json"));
+    assert.equal(fs.readFileSync(first.env.PHISHLAB_GMAIL_CREDENTIALS_PATH, "utf8"), fs.readFileSync(bundled, "utf8"));
+    if (process.platform !== "win32") assert.equal(fs.statSync(first.env.PHISHLAB_GMAIL_CREDENTIALS_PATH).mode & 0o777, 0o600);
+    fs.writeFileSync(first.env.PHISHLAB_GMAIL_CREDENTIALS_PATH, 'my local OAuth client');
+    getBackendLaunch(args);
+    assert.equal(fs.readFileSync(first.env.PHISHLAB_GMAIL_CREDENTIALS_PATH, "utf8"), 'my local OAuth client');
+  } finally { fs.rmSync(root, {recursive:true, force:true}); }
+});
+
+test("Windows GPU runtime manifest is passed to the packaged Python backend", () => {
+  const root = tmp();
+  try {
+    const resourcesPath = path.join(root, "resources");
+    const userData = path.join(root, "user");
+    const binary = path.join(resourcesPath, "backend", process.platform === "win32" ? "phislab-backend.exe" : "phislab-backend");
+    fs.mkdirSync(path.dirname(binary), { recursive: true });
+    fs.writeFileSync(binary, "test");
+    fs.writeFileSync(path.join(resourcesPath, "ai-runtime.json"), JSON.stringify({ backend: "vulkan" }));
+    const result = getBackendLaunch({ isPackaged: true, root, resourcesPath, userData, port: 18090, env: {} });
+    assert.equal(result.env.PHISHLAB_BUNDLED_AI_BACKEND, "vulkan");
+    const manual = getBackendLaunch({ isPackaged: true, root, resourcesPath, userData, port: 18090, env: { PHISHLAB_BUNDLED_AI_BACKEND: "cpu" } });
+    assert.equal(manual.env.PHISHLAB_BUNDLED_AI_BACKEND, "cpu");
+    fs.writeFileSync(path.join(resourcesPath, "ai-runtime.json"), '{invalid');
+    const invalid = getBackendLaunch({ isPackaged: true, root, resourcesPath, userData, port: 18090, env: {} });
+    assert.equal(invalid.env.PHISHLAB_BUNDLED_AI_BACKEND, undefined);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test("release packaging rejects host/target mismatch", () => {
+  const { assertNativeBuild } = require("../scripts/assert-platform.cjs");
+  assert.equal(assertNativeBuild("win32", "win32"), true);
+  assert.equal(assertNativeBuild("darwin", "darwin"), true);
+  assert.throws(() => assertNativeBuild("win32", "darwin"), /native Python backend/);
+  assert.throws(() => assertNativeBuild("darwin", "win32"), /native Python backend/);
+});

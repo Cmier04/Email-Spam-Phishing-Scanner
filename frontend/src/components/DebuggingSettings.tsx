@@ -204,7 +204,7 @@ export default function DebuggingSettings() {
               <p>Model: {aiStatus.model_filename} · GPU layers: {aiStatus.gpu_layers} ({aiStatus.configured_for_gpu ? "offload requested" : "CPU only"})</p>
               <p>Threads: {aiStatus.threads} · Context: {aiStatus.context_size} · Batch: {aiStatus.batch_size} · Timeout: {aiStatus.generation_timeout_seconds}s</p>
               {aiStatus.disabled_reason && <p role="status" className="rounded-lg bg-[#fff5e7] px-3 py-2 text-[#995a20]">{aiStatus.disabled_reason} Install Qwen using the developer setup before packaging, then choose Auto detect if a previous override disabled it.</p>}
-              <p className="text-[#9096a6]">GPU offload must be verified on the real Mac/CUDA host; this displays configured values only.</p>
+              <p className="text-[#9096a6]">GPU offload must be verified with Qwen on the actual Metal/CUDA/Vulkan host; this displays configured values only.</p>
             </div>
           )}
         </div>
@@ -214,6 +214,7 @@ export default function DebuggingSettings() {
             <div className="text-xs leading-6 text-[#4a566d]">
               <p><strong>Detected device:</strong> {settings.detected.device}</p>
               <p><strong>Recommended profile:</strong> {settings.detected.profile} ({settings.detected.install_backend})</p>
+              <p className="text-[#68758b]">{settings.detected.note}</p>
               <p>{settings.detected.note}</p>
               <p><strong>Device-detected defaults:</strong> Qwen {settings.detected_defaults.enabled ? "on" : "off"}, GPU layers {settings.detected_defaults.gpu_layers}, threads {settings.detected_defaults.threads}, context {settings.detected_defaults.context_size}, batch {settings.detected_defaults.batch_size}, timeout {settings.detected_defaults.generation_timeout_seconds}s.</p>
               <p><strong>Current mode:</strong> {settings.mode === "auto" ? "Automatic (device-detected)" : "Manual override"}</p>

@@ -132,7 +132,7 @@ async function requestJson(
     if (options.signal?.aborted) throw error;
 
     throw new ApiError(
-      "Cannot reach the PhisLab backend. In the desktop app, check whether its local service started successfully.",
+      "Cannot reach the PhishLab backend. In the desktop app, check whether its local service started successfully.",
       0
     );
   }
@@ -237,6 +237,18 @@ export async function getGmailStatus(
   return requireGmailConnectionStatus(
     await requestJson("/api/gmail/status", { signal })
   );
+}
+
+export async function importGmailOAuthClient(file: File): Promise<GmailConnectionStatus> {
+  // Desktop OAuth client config is metadata, not a Google account token. It
+  // stays in the local FastAPI app-data directory, never browser localStorage.
+  if (file.size > 16384) throw new ApiError("Google OAuth JSON must be under 16 KB.", 413);
+  const contents = await file.text();
+  return requireGmailConnectionStatus(await requestJson("/api/gmail/oauth-client", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: contents,
+  }));
 }
 
 export async function connectGmail(): Promise<GmailConnectionStatus> {

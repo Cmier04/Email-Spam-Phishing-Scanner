@@ -60,7 +60,8 @@ function createWindow() {
   const win = new BrowserWindow({
     width: 1300, height: 850, minWidth: 950, minHeight: 640,
     show: false,
-    title: "PhisLab",
+    title: "PhishLab",
+    icon: path.join(root, "desktop", "assets", "icon.png"),
     webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true, webSecurity: true },
   });
   win.once("ready-to-show", () => win.show());
@@ -82,7 +83,7 @@ async function boot() {
   try {
     session.defaultSession.setPermissionRequestHandler((_wc, _permission, callback) => callback(false));
     const port = development ? 8000 : await findAvailablePort();
-    if (await isPortListening(port)) throw new Error(`Loopback port ${port} is already in use. Close the process using it and relaunch PhisLab.`);
+    if (await isPortListening(port)) throw new Error(`Loopback port ${port} is already in use. Close the process using it and relaunch PhishLab.`);
     const config = getBackendLaunch({ isPackaged: app.isPackaged, root, resourcesPath: process.resourcesPath, userData: app.getPath("userData"), port });
     backendProcess = startBackend(config, line => process.stderr.write(line));
     // Spawn errors happen asynchronously; detect them without crashing the main process.
@@ -95,11 +96,15 @@ async function boot() {
     const win = createWindow();
     await win.loadURL(development ? FRONTEND_DEV_URL : APP_URL);
   } catch (error) {
-    dialog.showErrorBox("PhisLab could not start", `${error.message}\n\nIn development, confirm Python dependencies and npm packages are installed. See ELECTRON_SETUP.md.`);
+    dialog.showErrorBox("PhishLab could not start", `${error.message}\n\nIn development, confirm Python dependencies and npm packages are installed. See ELECTRON_SETUP.md.`);
     app.quit();
   }
 }
 
+// Keep user data in the legacy location so an upgrade does not hide saved labs or OAuth tokens.
+// This is an internal path only; the visible application name is PhishLab.
+app.setName("PhishLab");
+app.setPath("userData", path.join(app.getPath("appData"), "PhisLab"));
 app.whenReady().then(boot);
 app.on("before-quit", () => { shuttingDown = true; stopBackend(backendProcess); });
 app.on("window-all-closed", () => app.quit());

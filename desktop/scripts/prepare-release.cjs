@@ -22,5 +22,22 @@ for (const [name, minBytes] of [["email_classifier.pkl", 100], ["summary-qwen.gg
 const oauthDir = path.join(root, "desktop", "release-assets", "google");
 fs.mkdirSync(oauthDir, {recursive:true});
 const oauthFile = path.join(oauthDir, "credentials.json");
-if (!fs.existsSync(oauthFile)) console.warn("No bundled Google OAuth desktop client. Gmail sign-in will require separate configuration.");
+if (!fs.existsSync(oauthFile)) console.warn("No bundled Google OAuth desktop client. Users can import a Google OAuth Desktop JSON in Settings; or bundle your own OAuth client file for managed installs.");
+// Pin a truthful backend hint into the installer. A native Python bundle
+// cannot switch from CUDA to Vulkan simply by detecting a different GPU.
+// setup_local_ai.py writes this only after an installed wheel is verified.
+const runtimeManifest = path.join(root, "backend", ".local-ai-runtime.json");
+const allowedBackends = new Set(["cpu", "metal", "cuda", "vulkan"]);
+let backend = "unknown";
+if (fs.existsSync(runtimeManifest)) {
+  const installed = JSON.parse(fs.readFileSync(runtimeManifest, "utf8"));
+  if (allowedBackends.has(installed.backend)) backend = installed.backend;
+}
+if (process.platform === "win32" && backend === "unknown") {
+  throw new Error("Windows release must declare its installed native AI backend. Run python backend/scripts/setup_local_ai.py --vulkan --skip-model (or install the intended CUDA/CPU runtime), then rebuild the backend bundle.");
+}
+// A manifest alone is not proof that a user's GPU supports that backend.
+fs.writeFileSync(path.join(root, "desktop", "release-assets", "ai-runtime.json"),
+  JSON.stringify({ backend }, null, 2) + "\n");
+console.log(`Native AI backend manifest: ${backend}`);
 console.log("Release assets ready; check model redistribution permissions before publishing.");

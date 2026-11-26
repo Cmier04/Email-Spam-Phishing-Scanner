@@ -21,6 +21,15 @@ def main() -> None:
         raise SystemExit("Install backend/requirements.txt in this Python environment before packaging.")
     if importlib.util.find_spec("sqlalchemy") is None:
         raise SystemExit("Install backend/requirements-history.txt before packaging; SQLite scan history needs SQLAlchemy.")
+    # Google OAuth is required by Gmail even when the classifier/demo still work.
+    # PyInstaller can otherwise succeed while excluding dynamically imported OAuth modules.
+    for module in ("google_auth_oauthlib", "googleapiclient", "google.auth", "google.oauth2", "requests_oauthlib"):
+        try:
+            available = importlib.util.find_spec(module) is not None
+        except ModuleNotFoundError:
+            available = False
+        if not available:
+            raise SystemExit(f"Gmail dependency {module} is missing from the build environment. Install backend/requirements-history.txt in this Python environment, then rebuild.")
     cmd = [sys.executable, "-m", "PyInstaller", "--noconfirm", "--clean", "--onedir", "--name", "phislab-backend",
            "--distpath", str(ROOT / "desktop" / "dist-backend"),
            "--workpath", str(ROOT / "desktop" / "build-backend"),
@@ -28,7 +37,9 @@ def main() -> None:
            "--paths", str(ROOT / "backend"),
            "--hidden-import", "app.main", "--collect-submodules", "uvicorn",
            "--collect-all", "sklearn", "--collect-all", "scipy",
-           "--collect-submodules", "googleapiclient", "--collect-submodules", "google_auth_oauthlib",
+           "--collect-submodules", "googleapiclient", "--collect-all", "google_auth_oauthlib",
+           "--collect-submodules", "google.auth", "--collect-submodules", "google.oauth2",
+           "--collect-submodules", "requests_oauthlib", "--collect-submodules", "oauthlib",
            "--collect-submodules", "sqlalchemy", "--collect-submodules", "pymysql"]
     if importlib.util.find_spec("llama_cpp") is not None:
         cmd += ["--collect-all", "llama_cpp"]

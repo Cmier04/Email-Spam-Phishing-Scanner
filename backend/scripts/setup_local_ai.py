@@ -4,13 +4,16 @@ Run explicitly on the machine hosting FastAPI:
     python scripts/setup_local_ai.py
     python scripts/setup_local_ai.py --skip-model
     python scripts/setup_local_ai.py --cuda-wheel cu130  # CUDA host only
+    python scripts/setup_local_ai.py --vulkan          # Windows portable GPU build
 
-A prebuilt CPU, Metal, or CUDA wheel is preferred; no C++ compilation occurs
+A prebuilt CPU, Metal, CUDA, or Vulkan wheel is preferred; no C++ compilation occurs
 unless --allow-source-build is explicitly supplied. Never call from an API.
 """
 from __future__ import annotations
 
 import argparse
+import json
+import platform
 import os
 from pathlib import Path
 import re
@@ -85,7 +88,7 @@ def _install_wheel(backend: str, *, cuda_wheel: str | None = None) -> bool:
             print('No supported CUDA wheel version detected; use --cuda-wheel or try CPU.', file=sys.stderr)
             return False
         directory = cuda_wheel
-    elif backend in ('cpu', 'metal'):
+    elif backend in ('cpu', 'metal', 'vulkan'):
         directory = backend
     else:
         raise ValueError(f'Unsupported AI backend: {backend}')
@@ -109,6 +112,7 @@ def _install_from_source(backend: str) -> bool:
     env = os.environ.copy()
     env['CMAKE_ARGS'] = {
         'cuda': '-DGGML_CUDA=on',
+        'vulkan': '-DGGML_VULKAN=on',
         'metal': '-DGGML_METAL=on',
         'cpu': '-DGGML_CUDA=off -DGGML_METAL=off',
     }[backend]
@@ -173,7 +177,9 @@ def _apply_cpu_fallback_settings(profile_backend: str) -> None:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--skip-model', action='store_true', help='Do not download the checked GGUF model')
-    parser.add_argument('--cpu', action='store_true', help='Install portable CPU runtime, even if a GPU is detected')
+    backend_choice = parser.add_mutually_exclusive_group()
+    backend_choice.add_argument('--cpu', action='store_true', help='Install portable CPU runtime, even if a GPU is detected')
+    backend_choice.add_argument('--vulkan', action='store_true', help='Prefer cross-vendor Vulkan on Windows (AMD or NVIDIA)')
     parser.add_argument('--cuda-wheel', choices=sorted(set(_CUDA_WHEELS.values())),
                         help='Explicit CUDA wheel tag, e.g. cu124 or cu130 (CUDA host only)')
     parser.add_argument('--allow-source-build', action='store_true',
@@ -181,9 +187,11 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     profile = detect_device_profile()
-    preferred = 'cpu' if args.cpu else profile.install_backend
+    if args.vulkan and platform.system() != 'Windows':
+        parser.error('--vulkan is only supported on Windows')
+    preferred = 'cpu' if args.cpu else ('vulkan' if args.vulkan else profile.install_backend)
     if args.cuda_wheel and preferred != 'cuda':
-        parser.error('--cuda-wheel requires a detected CUDA device (and cannot be used with --cpu)')
+        parser.error('--cuda-wheel requires a detected CUDA device and cannot be combined with --cpu or --vulkan')
     if sys.version_info[:2] not in ((3, 10), (3, 11), (3, 12)):
         print('Note: official prebuilt wheel instructions specify Python 3.10-3.12; '
               'if no matching wheel exists, use Python 3.11/3.12 or --allow-source-build.')
@@ -230,7 +238,12 @@ def main(argv: list[str] | None = None) -> int:
             print('Runtime installed; download the GGUF model separately.', file=sys.stderr)
             return 3
 
-    print('Installation finished. Restart FastAPI/Electron to apply AI settings.')
+    # A separate metadata file is created only after the native runtime has
+    # actually passed import/offload verification. Release staging can use it
+    # to tell Electron which native backend it packaged.
+    runtime_file = _BACKEND / '.local-ai-runtime.json'
+    runtime_file.write_text(json.dumps({'backend': installed_backend}, indent=2) + '\n', encoding='utf-8')
+    print(f'Installed native runtime: {installed_backend}. Restart FastAPI/Electron to apply AI settings.')
     return 0
 
 

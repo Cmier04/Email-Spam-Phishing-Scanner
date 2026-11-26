@@ -8,6 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass, asdict
 from functools import lru_cache
 import importlib.util
+import ctypes
 import json
 import os
 from pathlib import Path
@@ -53,6 +54,53 @@ def _nvidia_cuda_available() -> bool:
         return False
 
 
+def _windows_gpu_adapters() -> list[dict[str, str]]:
+    """Query Windows display adapters without shell interpolation.
+
+    PowerShell may be disabled by policy. In that case, detection intentionally
+    falls back to CPU rather than guessing from the processor architecture.
+    """
+    if platform.system() != 'Windows':
+        return []
+    query = ('Get-CimInstance -ClassName Win32_VideoController | '
+             'Select-Object Name,PNPDeviceID | ConvertTo-Json -Compress')
+    try:
+        result = subprocess.run(
+            ['powershell.exe', '-NoProfile', '-NonInteractive', '-Command', query],
+            capture_output=True, text=True, timeout=6, check=False,
+        )
+        if result.returncode != 0 or len(result.stdout) > 65536:
+            return []
+        raw = json.loads(result.stdout)
+        entries = raw if isinstance(raw, list) else [raw]
+        return [entry for entry in entries if isinstance(entry, dict)]
+    except (OSError, ValueError, subprocess.TimeoutExpired):
+        return []
+
+
+def _windows_amd_gpu_available() -> bool:
+    for adapter in _windows_gpu_adapters():
+        name = str(adapter.get('Name') or '').lower()
+        identifier = str(adapter.get('PNPDeviceID') or '').lower()
+        if any(vendor in name for vendor in ('amd', 'radeon', 'advanced micro devices', 'ati technologies')) or 'ven_1002' in identifier:
+            return True
+    return False
+
+
+def _windows_vulkan_loader_available() -> bool:
+    """The Vulkan loader is required but does not itself prove GPU support.
+
+    The llama.cpp worker is the final authority: if loading a GPU model fails,
+    it retries CPU inference with the *same* Qwen model.
+    """
+    if platform.system() != 'Windows':
+        return False
+    try:
+        return bool(getattr(ctypes.WinDLL('vulkan-1.dll'), 'vkCreateInstance', None))
+    except (AttributeError, OSError):
+        return False
+
+
 @lru_cache(maxsize=1)
 def detect_device_profile() -> DeviceProfile:
     system = platform.system()
@@ -61,9 +109,29 @@ def detect_device_profile() -> DeviceProfile:
     if system == 'Darwin' and machine in ('arm64', 'aarch64'):
         return DeviceProfile('apple-metal', 'Apple silicon / macOS Metal', -1, threads, 2048, 256, 60,
                              'metal', 'Metal acceleration requested; actual offload requires a Metal-enabled llama-cpp-python build.')
-    if system in ('Linux', 'Windows') and _nvidia_cuda_available():
+    # A packaged Windows build includes one compiled llama.cpp backend. The
+    # Electron launcher supplies that backend from a release manifest; do not
+    # request CUDA when a cross-vendor Vulkan wheel was actually bundled.
+    packaged_backend = os.getenv('PHISHLAB_BUNDLED_AI_BACKEND', '').lower()
+    nvidia = system in ('Linux', 'Windows') and _nvidia_cuda_available()
+    if system == 'Windows' and packaged_backend == 'cpu':
+        return DeviceProfile('cpu', 'Windows / bundled CPU runtime', 0, threads, 2048, 128, 90,
+                             'cpu', 'This installer contains the CPU runtime; GPU acceleration requires a different build.')
+    if system == 'Windows' and packaged_backend == 'vulkan':
+        if _windows_vulkan_loader_available() and (nvidia or _windows_amd_gpu_available()):
+            return DeviceProfile('windows-vulkan', 'Windows / Vulkan-compatible GPU candidate', -1, threads, 2048, 256, 75,
+                                 'vulkan', 'Bundled Vulkan runtime selected. Actual GPU offload is confirmed only when Qwen loads.')
+        return DeviceProfile('cpu', 'Windows / Vulkan device unavailable', 0, threads, 2048, 128, 90,
+                             'cpu', 'The bundled Vulkan runtime will run Qwen on CPU if no usable GPU/driver is available.')
+    if nvidia and packaged_backend not in ('vulkan', 'cpu'):
         return DeviceProfile('nvidia-cuda', 'NVIDIA GPU / CUDA-capable host', -1, threads, 2048, 256, 60,
                              'cuda', 'CUDA acceleration requested; the installed llama-cpp-python must support CUDA.')
+    if system == 'Windows' and packaged_backend not in ('cuda', 'metal') and _windows_amd_gpu_available():
+        if _windows_vulkan_loader_available():
+            return DeviceProfile('amd-vulkan', 'AMD Radeon / Windows Vulkan candidate', -1, threads, 2048, 256, 75,
+                                 'vulkan', 'AMD display adapter and Vulkan loader detected; GPU offload requires a Vulkan-enabled runtime and usable GPU driver.')
+        return DeviceProfile('cpu', 'AMD Radeon / Vulkan loader unavailable', 0, threads, 2048, 128, 90,
+                             'cpu', 'Install/update your AMD graphics driver to enable Vulkan; CPU inference is available.')
     return DeviceProfile('cpu', f'{system or "Unknown"} / {machine or "unknown"}', 0, threads, 2048, 128, 90,
                          'cpu', 'CPU-only default; supported even when a GPU is not detected or its runtime is unavailable.')
 

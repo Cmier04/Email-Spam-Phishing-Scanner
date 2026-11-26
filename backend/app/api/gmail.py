@@ -1,6 +1,7 @@
 """FastAPI routes for local Gmail account management and message scanning."""
 
 import logging
+import json
 from ipaddress import ip_address
 from urllib.parse import urlsplit
 
@@ -18,6 +19,7 @@ from app.services.gmail_service import (
     GmailConfigurationError,
     NoGmailMessagesError,
     connect_gmail_account,
+    configure_gmail_oauth_client,
     disconnect_gmail_account,
     get_gmail_connection_status,
     get_google_avatar,
@@ -94,6 +96,33 @@ def _raise_http_error(error: Exception) -> None:
             dependencies=[Depends(require_local_state_change)])
 def gmail_connection_status():
     return get_gmail_connection_status()
+
+
+@router.post("/oauth-client", response_model=GmailConnectionResponse,
+             dependencies=[Depends(require_local_state_change)])
+async def import_gmail_oauth_client(request: Request):
+    """Configure a bounded OAuth Desktop client from a trusted local UI."""
+    try:
+        size = int(request.headers.get("content-length", "0"))
+    except ValueError:
+        size = 16385
+    if size > 16384:
+        raise HTTPException(status_code=413, detail="OAuth client JSON exceeds 16 KB.")
+    # Read in bounded chunks even when the client omits Content-Length.
+    chunks, total = [], 0
+    async for chunk in request.stream():
+        total += len(chunk)
+        if total > 16384:
+            raise HTTPException(status_code=413, detail="OAuth client JSON exceeds 16 KB.")
+        chunks.append(chunk)
+    try:
+        configuration = json.loads(b"".join(chunks))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise HTTPException(status_code=400, detail="Select a valid JSON OAuth client file.") from exc
+    try:
+        return configure_gmail_oauth_client(configuration)
+    except GmailConfigurationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.post(

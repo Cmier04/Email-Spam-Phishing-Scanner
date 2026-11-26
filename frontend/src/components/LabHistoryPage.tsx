@@ -23,7 +23,7 @@ export default function LabHistoryPage({onOpenMenu, onResume}: {
         setItems(result.items); setTotal(result.total);
       } else { setItems([]); setTotal(0); }
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : "Could not load Lab History.");
+      setError(failure instanceof Error ? failure.message : "Could not load Lab history.");
     } finally { setLoading(false); }
   }, [page]);
   useEffect(() => { void reload(); }, [reload]);
@@ -42,12 +42,13 @@ export default function LabHistoryPage({onOpenMenu, onResume}: {
     finally { setBusy(null); }
   }
   return <>
-    <header className="flex min-h-[72px] items-center gap-3 border-b border-[#e4e8ef] bg-white px-5 md:px-8">
+    <header className="phishlab-topbar-enter flex min-h-[72px] items-center gap-3 border-b border-[#e4e8ef] bg-white px-5 md:px-8">
       <button type="button" onClick={onOpenMenu} aria-label="Open navigation menu" className="text-[#596579] lg:hidden"><Menu size={20}/></button>
       <FlaskConical size={19} className="text-[#3157d5]"/>
-      <h1 className="text-sm font-bold text-[#202a44]">Lab History</h1>
+      <div><h1 className="text-sm font-bold text-[#202a44]">Lab history</h1>
+        <p className="mt-1 text-[11px] text-[#9299aa]">Revisit your learning results and continue improving saved emails</p></div>
     </header>
-    <div className="mx-auto max-w-[1000px] space-y-5 px-5 py-7 md:px-8 md:py-9">
+    <div className="phishlab-history-stagger mx-auto max-w-[1000px] space-y-5 px-5 py-7 md:px-8 md:py-9">
       <div className="flex items-center justify-between gap-3">
         <div><h2 className="text-2xl font-bold text-[#17213c]">Your saved learning labs</h2>
           <p className="mt-1 text-xs leading-5 text-[#747e93]">Reopen a modified email, review its explanation and classification comparison, or try another transformation. All saved copies stay on this computer.</p></div>
@@ -55,11 +56,11 @@ export default function LabHistoryPage({onOpenMenu, onResume}: {
       </div>
       {error && <p role="alert" className="rounded-xl bg-red-50 p-3 text-xs text-red-700">{error}</p>}
       {loading ? <p role="status" className="text-sm text-[#687288]">Loading your saved labs…</p>
-        : !status?.available ? <p className="rounded-2xl border bg-white p-6 text-sm text-[#687288]">Local storage is unavailable. Open PhisLab through Electron or configure the backend database.</p>
+        : !status?.available ? <p className="rounded-2xl border bg-white p-6 text-sm text-[#687288]">Local storage is unavailable. Open PhishLab through Electron or configure the backend database.</p>
         : !status.enabled ? <p className="rounded-2xl border bg-white p-6 text-sm text-[#687288]">Saving is turned off. Enable <strong>Save Lab history</strong> under Settings → Data and privacy to save and resume learning labs. Previously saved labs remain available.</p>
         : null}
       {!loading && items.length === 0 && status?.available && <p className="rounded-2xl border bg-white p-6 text-sm text-[#687288]">No saved labs yet. Open an email, try a What-If change, and the experiment and summary will be saved here when history is enabled.</p>}
-      <div className="space-y-3" aria-label="Saved learning labs">
+      <div className="phishlab-history-list space-y-3" aria-label="Saved learning labs">
         {items.map(item => <article key={item.id} className="rounded-2xl border border-[#e1e6ee] bg-white p-5 shadow-sm">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0 flex-1"><h3 className="break-words text-sm font-bold text-[#202a44]">{item.subject || "(No subject)"}</h3>

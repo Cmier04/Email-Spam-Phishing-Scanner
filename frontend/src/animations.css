@@ -168,6 +168,11 @@
 
 /* The backwards fill mode hides a section only until its scheduled entrance;
    it does not leave transforms on cards or layout containers afterward. */
+.phishlab-history-stagger > :first-child,
+.phishlab-history-stagger > :nth-child(2),
+.phishlab-history-stagger > :nth-child(3),
+.phishlab-history-stagger > :nth-child(4),
+.phishlab-history-list > *,
 .phishlab-dashboard-stagger > :first-child,
 .phishlab-dashboard-stagger > :last-child,
 .phishlab-dashboard-metrics > *,
@@ -197,6 +202,17 @@
   animation-fill-mode: backwards;
 }
 
+
+/* Lab History reveals its introduction, notices, saved entries, and pagination from top to bottom. */
+.phishlab-history-stagger > :first-child { animation-delay: 35ms; }
+.phishlab-history-stagger > :nth-child(2) { animation-delay: 90ms; }
+.phishlab-history-stagger > :nth-child(3) { animation-delay: 125ms; }
+.phishlab-history-stagger > :nth-child(4) { animation-delay: 160ms; }
+.phishlab-history-list > :nth-child(1) { animation-delay: 165ms; }
+.phishlab-history-list > :nth-child(2) { animation-delay: 205ms; }
+.phishlab-history-list > :nth-child(3) { animation-delay: 245ms; }
+.phishlab-history-list > :nth-child(4) { animation-delay: 285ms; }
+.phishlab-history-list > :nth-child(n+5) { animation-delay: 310ms; }
 
 /* Dashboard: welcome -> four separate metrics -> recent email results. */
 .phishlab-dashboard-stagger > :first-child { animation-delay: 35ms; }
@@ -440,4 +456,9 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .phishlab-startup-progress, .phishlab-connect-dialog { animation: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .phishlab-history-stagger > *,
+  .phishlab-history-list > * { animation: none; }
 }
