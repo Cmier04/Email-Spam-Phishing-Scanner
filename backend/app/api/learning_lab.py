@@ -1,8 +1,9 @@
 """Learning Lab API routes."""
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
 from app.models.schemas import WhatIfRequest, WhatIfResponse
+from app.api.gmail import require_local_state_change
 from app.services.demo_email_service import DemoEmailNotFoundError
 from app.services.gmail_service import (
     GmailAPIError,
@@ -26,7 +27,7 @@ def ai_status() -> dict:
     return get_local_ai_status()
 
 
-@router.post("/what-if", response_model=WhatIfResponse)
+@router.post("/what-if", response_model=WhatIfResponse, dependencies=[Depends(require_local_state_change)])
 def what_if(request: WhatIfRequest) -> WhatIfResponse:
     try:
         return run_what_if_experiment(

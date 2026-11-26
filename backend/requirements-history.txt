@@ -1,0 +1,4 @@
+# Install only when using the opt-in scan history database.
+-r requirements.txt
+SQLAlchemy>=2.0,<2.1
+PyMySQL>=1.1,<2.0

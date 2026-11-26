@@ -25,7 +25,7 @@ import {
 } from "lucide-react";
 
 import type { Email } from "../data/mockEmails";
-import { runWhatIf, type WhatIfResponse } from "../api";
+import { runWhatIf, saveLabSession, getHistoryStatus, type WhatIfResponse, type LabSessionSnapshot } from "../api";
 import { buildLearningSummary } from "../data/learningSummary";
 import {
   buildFinalSessionSummary,
@@ -48,6 +48,7 @@ import "../animations.css";
 type LearningLabProps = {
   email: Email;
   active?: boolean;
+  initialSession?: LabSessionSnapshot | null;
   onBack: () => void;
   onOpenMenu: () => void;
 };
@@ -239,18 +240,29 @@ function SelectableField({
 function LearningLab({
   email,
   active = true,
+  initialSession,
   onBack,
   onOpenMenu,
 }: LearningLabProps) {
   const [selectedPart, setSelectedPart] =
-    useState<EmailPart>("subject");
+    useState<EmailPart>(() => (initialSession?.selected_part as EmailPart) || "subject");
 
   // Only confirmed changes are stored; the original email prop never changes.
   const [changes, setChanges] = useState<
     Partial<Record<EmailPart, LabChange>>
-  >({});
+  >(() => {
+    const saved: Partial<Record<EmailPart, LabChange>> = {};
+    for (const item of initialSession?.changes || []) {
+      const part = item.part as EmailPart;
+      const matched = getLabOptions(part, email).find(option => option.id === item.id);
+      if (matched) saved[part] = matched;
+    }
+    return saved;
+  });
   const [experiment, setExperiment] =
-    useState<WhatIfResponse | null>(null);
+    useState<WhatIfResponse | null>(() => initialSession?.experiment || null);
+  const [labSaveStatus, setLabSaveStatus] = useState<string | null>(null);
+  const [historyEnabled, setHistoryEnabled] = useState(false);
   const [experimentLoading, setExperimentLoading] =
     useState(false);
   const [experimentError, setExperimentError] =
@@ -270,6 +282,10 @@ function LearningLab({
     useState<EmailPart | null>(null);
   const [summaryClosing, setSummaryClosing] =
     useState(false);
+
+  useEffect(() => {
+    getHistoryStatus().then(value => setHistoryEnabled(value.available && value.enabled)).catch(() => setHistoryEnabled(false));
+  }, []);
 
   const requestSequence = useRef(0);
   const inFlight = useRef<AbortController | null>(null);
@@ -687,6 +703,13 @@ function LearningLab({
       setChanges(nextChanges);
       setExperiment(result);
       setShowLearningSummary(false);
+      if (historyEnabled) {
+        setLabSaveStatus("Saving lab...");
+        void saveLabSession({email, experiment: result,
+          changes: nextApplied.map(item => ({part: item.part, id: item.id})), selected_part: selectedPart})
+          .then(() => setLabSaveStatus("Saved to Lab History — you can continue later."))
+          .catch(reason => setLabSaveStatus(reason instanceof Error ? reason.message : "Could not save Lab History."));
+      }
       flashChangedField(changedPart);
       scoreChangesIndividually(nextApplied, result);
     } catch (error) {
@@ -1088,6 +1111,9 @@ function LearningLab({
             )}
           </div>
 
+          {labSaveStatus && <p role="status" className="mb-3 text-[11px] text-[#596579]">{labSaveStatus}</p>}
+          {!historyEnabled && <p className="mb-3 text-[11px] text-[#7b8497]">To resume this email later, enable Save Lab history in Settings → Data and privacy.</p>}
+          {initialSession && <p className="mb-3 text-[11px] font-medium text-[#3157d5]">Resumed from Lab History. Existing edits and results are restored; new edits run another What-If comparison.</p>}
           {/* The learning summary uses only edits that are still applied. */}
           <div className="mt-5 border-t border-[#dfe4f3] pt-5">
             <div className="flex flex-wrap items-center justify-between gap-3">

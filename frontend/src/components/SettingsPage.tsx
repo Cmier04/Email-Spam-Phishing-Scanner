@@ -2,22 +2,18 @@
 import {
   useEffect,
   useState,
-  type ChangeEvent,
   type ReactNode,
 } from "react";
 
 import {
   Bell,
   BookOpen,
-  CalendarDays,
-  Download,
   Mail,
   Menu,
   RotateCcw,
   ScanLine,
   Settings2,
   ShieldAlert,
-  Trash2,
   type LucideIcon,
 } from "lucide-react";
 
@@ -30,12 +26,12 @@ import {
 } from "../api";
 
 import DebuggingSettings from "./DebuggingSettings";
+import HistoryDataSettings from "./HistoryDataSettings";
 
 import {
   defaultSettings,
   loadSettings,
   saveSettings,
-  type RetentionPeriod,
   type SettingsPreferences,
 } from "../data/settingsPreferences";
 
@@ -393,45 +389,7 @@ function SettingsPage({
               onToggle={() => toggle("showLearningSuggestions")}
             />
 
-            <div className="flex flex-wrap items-center justify-between gap-4 py-4">
-              <div className="flex items-start gap-3">
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#f0f3f8] text-[#687288]">
-                  <CalendarDays size={17} />
-                </span>
 
-                <div>
-                  <label
-                    htmlFor="retention-period"
-                    className="text-xs font-semibold text-[#35405a]"
-                  >
-                    Scan history retention
-                  </label>
-
-                  <p className="mt-1 text-[11px] leading-5 text-[#8a92a4]">
-                    Saved preference only; automatic deletion is not active.
-                  </p>
-                </div>
-              </div>
-
-              <select
-                id="retention-period"
-                value={preferences.retentionDays}
-                onChange={(
-                  event: ChangeEvent<HTMLSelectElement>
-                ) =>
-                  updatePreferences({
-                    ...preferences,
-                    retentionDays:
-                      event.target.value as RetentionPeriod,
-                  })
-                }
-                className="rounded-lg border border-[#dfe4eb] bg-white px-3 py-2 text-xs font-medium text-[#596579] outline-none focus:border-[#8097df] focus:ring-2 focus:ring-[#e7ebfa]"
-              >
-                <option value="30">30 days</option>
-                <option value="90">90 days</option>
-                <option value="365">1 year</option>
-              </select>
-            </div>
           </SettingsSection>
 
           {/* Notifications */}
@@ -458,63 +416,8 @@ function SettingsPage({
 
           <DebuggingSettings />
 
-          {/* Data and privacy */}
-          <SettingsSection
-            title="Data and privacy"
-            description="Data management will become available after backend integration."
-          >
-            <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[#edf0f4] py-4">
-              <div className="flex items-start gap-3">
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#f0f3f8] text-[#687288]">
-                  <Download size={17} />
-                </span>
-
-                <div>
-                  <p className="text-xs font-semibold text-[#35405a]">
-                    Export scan history
-                  </p>
-
-                  <p className="mt-1 text-[11px] text-[#8a92a4]">
-                    Download analyzed records when history storage is connected.
-                  </p>
-                </div>
-              </div>
-
-              <button
-                type="button"
-                disabled
-                className="cursor-not-allowed rounded-lg border border-[#dfe4eb] bg-[#f7f8fa] px-3.5 py-2 text-[11px] font-semibold text-[#9aa2b0]"
-              >
-                Export
-              </button>
-            </div>
-
-            <div className="flex flex-wrap items-center justify-between gap-4 py-4">
-              <div className="flex items-start gap-3">
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#fff0ed] text-[#c55243]">
-                  <Trash2 size={17} />
-                </span>
-
-                <div>
-                  <p className="text-xs font-semibold text-[#35405a]">
-                    Delete scan history
-                  </p>
-
-                  <p className="mt-1 text-[11px] text-[#8a92a4]">
-                    Deleting server records will require confirmation and backend support.
-                  </p>
-                </div>
-              </div>
-
-              <button
-                type="button"
-                disabled
-                className="cursor-not-allowed rounded-lg border border-[#f0d0ca] bg-[#fff8f7] px-3.5 py-2 text-[11px] font-semibold text-[#d09b92]"
-              >
-                Delete
-              </button>
-            </div>
-          </SettingsSection>
+          {/* Saved scan history and privacy controls */}
+          <HistoryDataSettings />
         </div>
 
         {/* Reset preferences */}

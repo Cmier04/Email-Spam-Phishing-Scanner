@@ -37,6 +37,10 @@ def set_ai_settings(settings: AIConfigurationUpdate, request: Request) -> dict:
         raise HTTPException(403, detail='AI settings are editable from the local app only.')
     try:
         save_override(settings.model_dump(exclude_none=True))
+        # Invalidate any cached generations and release GPU RAM immediately
+        # when users disable Qwen or change the device profile.
+        from app.services.local_ai_summary_service import reset_local_ai_worker
+        reset_local_ai_worker()
         return resolved_ai_configuration()
     except ValueError as exc:
         raise HTTPException(422, detail=str(exc)) from exc

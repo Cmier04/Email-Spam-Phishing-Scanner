@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "test": "node --experimental-strip-types --test src/data/emailPresentation.test.mjs",
+    "test": "node --experimental-strip-types --test src/data/*.test.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

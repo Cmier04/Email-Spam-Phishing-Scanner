@@ -2,12 +2,14 @@ import { useEffect, useState } from "react";
 import {
   getAISettings,
   getLocalAIStatus,
+  getSystemReadiness,
   getPythonTests,
   runPythonTest,
   setAISettings,
   type AIConfigValues,
   type AISettingsResponse,
   type LocalAIStatus,
+  type SystemReadiness,
   type PythonTestEntry,
   type PythonTestResult,
 } from "../api";
@@ -43,6 +45,8 @@ function initialValues(settings: AISettingsResponse): AIConfigValues {
 
 export default function DebuggingSettings() {
   const [forceQwen, setForceQwen] = useState(readForceQwenPreference);
+  const [readiness, setReadiness] = useState<SystemReadiness | null>(null);
+  const [readinessError, setReadinessError] = useState<string | null>(null);
   const [aiStatus, setAiStatus] = useState<LocalAIStatus | null>(null);
   const [aiStatusError, setAiStatusError] = useState<string | null>(null);
   const [refreshStatus, setRefreshStatus] = useState(0);
@@ -93,6 +97,16 @@ export default function DebuggingSettings() {
 
   useEffect(() => {
     const controller = new AbortController();
+    getSystemReadiness(controller.signal)
+      .then((value) => {
+        if (!controller.signal.aborted) {
+          setReadiness(value);
+          setReadinessError(null);
+        }
+      })
+      .catch((error: unknown) => {
+        if (!controller.signal.aborted) setReadinessError(displayError(error));
+      });
     getLocalAIStatus(controller.signal)
       .then((value) => {
         if (!controller.signal.aborted) {
@@ -147,6 +161,21 @@ export default function DebuggingSettings() {
         <p className="mt-1 text-xs text-[#8a92a4]">Local AI device settings and development diagnostics.</p>
       </div>
       <div className="space-y-5 px-5 py-5 md:px-6">
+        <div className="space-y-2 rounded-xl border border-[#dce3f5] bg-[#f8faff] p-4" aria-label="Application readiness">
+          <div className="flex items-center justify-between gap-2">
+            <h3 className="text-xs font-bold text-[#202a44]">Application readiness</h3>
+            <button type="button" onClick={() => setRefreshStatus((n) => n + 1)} className="text-xs font-semibold text-[#3157d5]">Refresh</button>
+          </div>
+          {readinessError && <p role="status" className="text-xs text-[#a33a3a]">{readinessError}</p>}
+          {!readiness && !readinessError && <p className="text-xs text-[#68758b]">Checking local components...</p>}
+          {readiness && <div className="space-y-1 text-xs text-[#4a566d]" aria-live="polite">
+            <p><strong>Status:</strong> {readiness.status === "ready" ? "Classifier ready" : "Setup required"}</p>
+            <p><strong>Classifier:</strong> {readiness.classifier_ready ? "Ready" : "Missing or unavailable"}</p>
+            <p><strong>Qwen:</strong> {readiness.qwen_enabled && readiness.qwen_model_available ? "Configured" : "Optional AI not ready"}</p>
+            <p><strong>Gmail OAuth configuration:</strong> {readiness.gmail_credentials_configured ? "Present" : "Not configured (optional)"}</p>
+            <p className="text-[11px] text-[#68758b]">{readiness.message}</p>
+          </div>}
+        </div>
         <div className="space-y-3 rounded-xl border border-[#dce3f5] bg-[#f8faff] p-4">
           <h3 className="text-xs font-bold text-[#202a44]">Learning Lab AI behavior</h3>
           <label className="flex cursor-pointer items-start gap-3">
@@ -171,9 +200,10 @@ export default function DebuggingSettings() {
           {!aiStatus && !aiStatusError && <p>Checking FastAPI configuration...</p>}
           {aiStatus && (
             <div className="space-y-1" aria-live="polite">
-              <p>Backend AI: <strong>{aiStatus.enabled ? "enabled" : "disabled"}</strong> · GGUF file: <strong>{aiStatus.model_file_available ? "found" : "missing"}</strong></p>
+              <p>Backend AI: <strong>{aiStatus.enabled ? "enabled" : "disabled"}</strong> · GGUF file: <strong>{aiStatus.model_file_available ? "found" : "missing"}</strong> · Runtime: <strong>{aiStatus.runtime_available ? "installed" : "missing"}</strong></p>
               <p>Model: {aiStatus.model_filename} · GPU layers: {aiStatus.gpu_layers} ({aiStatus.configured_for_gpu ? "offload requested" : "CPU only"})</p>
               <p>Threads: {aiStatus.threads} · Context: {aiStatus.context_size} · Batch: {aiStatus.batch_size} · Timeout: {aiStatus.generation_timeout_seconds}s</p>
+              {aiStatus.disabled_reason && <p role="status" className="rounded-lg bg-[#fff5e7] px-3 py-2 text-[#995a20]">{aiStatus.disabled_reason} Install Qwen using the developer setup before packaging, then choose Auto detect if a previous override disabled it.</p>}
               <p className="text-[#9096a6]">GPU offload must be verified on the real Mac/CUDA host; this displays configured values only.</p>
             </div>
           )}

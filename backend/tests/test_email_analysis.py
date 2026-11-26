@@ -136,7 +136,7 @@ class EmailAnalysisTests(unittest.TestCase):
                    "classification": "Legitimate", "confidence": 89.0,
                    "security_analysis": analyze_email({"body": "Please send your password now."})}
         with patch("app.api.gmail.scan_recent_messages", return_value=[message]):
-            response = TestClient(app).get("/api/gmail/recent?limit=1")
+            response = TestClient(app, client=("127.0.0.1", 50001)).get("/api/gmail/recent?limit=1")
         self.assertEqual(response.status_code, 200)
         item = response.json()[0]
         self.assertEqual(item["classification"], "Legitimate")

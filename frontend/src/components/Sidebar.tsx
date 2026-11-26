@@ -3,13 +3,14 @@ import {
   ShieldCheck,
   LayoutDashboard,
   Mail,
+  History,
   Settings,
   CircleHelp,
   ChevronRight,
   X,
 } from "lucide-react";
 
-export type AppPage = "dashboard" | "results" | "settings" | "help";
+export type AppPage = "dashboard" | "results" | "history" | "settings" | "help";
 
 type SidebarProps = {
   isOpen: boolean;
@@ -17,6 +18,9 @@ type SidebarProps = {
   activePage: AppPage;
   onNavigate: (page: AppPage) => void;
   collapsed: boolean;
+  accountName?: string | null;
+  accountEmail?: string | null;
+  accountAvatar?: boolean;
 };
 
 function Sidebar({
@@ -25,6 +29,7 @@ function Sidebar({
   activePage,
   onNavigate,
   collapsed,
+  accountName, accountEmail, accountAvatar,
 }: SidebarProps) {
   const activeStyle =
     "bg-[#eef2ff] text-[#3157d5]";
@@ -152,6 +157,13 @@ function Sidebar({
               Scan results
             </span>
           </button>
+          <button type="button" onClick={() => onNavigate("history")}
+            aria-current={activePage === "history" ? "page" : undefined}
+            aria-label="Lab history" title={collapsed ? "Lab history" : undefined}
+            className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-xs font-semibold transition ${activePage === "history" ? activeStyle : inactiveStyle} ${collapsed ? "lg:justify-center lg:px-2" : ""}`}>
+            <History size={18} className="shrink-0" />
+            <span className={collapsed ? "lg:hidden" : ""}>Lab history</span>
+          </button>
         </nav>
 
         {/* Workspace navigation */}
@@ -236,46 +248,24 @@ function Sidebar({
           </button>
         </nav>
 
-        {/* Temporary user profile */}
-        <div
-          className={`mt-auto flex items-center gap-3 px-2 ${
-            collapsed
-              ? "lg:justify-center lg:px-0"
-              : ""
-          }`}
-        >
-          <div
-            title={
-              collapsed
-                ? "John Doe — Prototype profile"
-                : undefined
-            }
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#dce5ff] text-xs font-bold text-[#3157d5]"
-          >
-            JD
+        {/* Signed-in Google identity, with safe fallback while disconnected. */}
+        <div className={`mt-auto flex items-center gap-3 px-2 ${collapsed ? "lg:justify-center lg:px-0" : ""}`}>
+          <div title={collapsed ? accountName || "Connect Gmail in Settings" : undefined}
+            className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#dce5ff] text-xs font-bold text-[#3157d5]">
+            {accountAvatar ? (
+              <img src="/api/gmail/avatar" alt="Google account profile" referrerPolicy="no-referrer"
+                className="h-full w-full object-cover"
+                onError={(event) => { event.currentTarget.style.display = "none"; event.currentTarget.nextElementSibling?.classList.remove("sr-only"); }} />
+            ) : null}
+            <span className={accountAvatar ? "sr-only" : ""}>{accountName?.trim().slice(0, 1).toUpperCase() || "?"}</span>
           </div>
-
-          <div
-            className={`min-w-0 flex-1 ${
-              collapsed ? "lg:hidden" : ""
-            }`}
-          >
-            <p className="text-xs font-semibold text-[#26314c]">
-              John Doe
-            </p>
-
-            <p className="text-[11px] text-[#8a92a4]">
-              Prototype profile
-            </p>
+          <div className={`min-w-0 flex-1 ${collapsed ? "lg:hidden" : ""}`}>
+            <p className="truncate text-xs font-semibold text-[#26314c]">{accountName || "No Google account"}</p>
+            <p className="truncate text-[11px] text-[#8a92a4]">{accountEmail || "Connect Gmail in Settings"}</p>
           </div>
-
-          <ChevronRight
-            size={16}
-            className={`text-[#949bad] ${
-              collapsed ? "lg:hidden" : ""
-            }`}
-          />
+          <ChevronRight size={16} className={`text-[#949bad] ${collapsed ? "lg:hidden" : ""}`} />
         </div>
+
       </aside>
     </>
   );

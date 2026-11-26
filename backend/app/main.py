@@ -1,7 +1,11 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.debugging import router as debugging_router
+from app.api.system import router as system_router
+from app.api.history import router as history_router
+from app.services.classifier_service import ClassifierUnavailableError, ClassifierPredictionError
 from app.api.classify import router as classify_router
 from app.api.demo import router as demo_router
 from app.api.gmail import router as gmail_router
@@ -61,3 +65,17 @@ app.include_router(
 
 
 app.include_router(debugging_router, prefix="/api")
+
+
+@app.exception_handler(ClassifierUnavailableError)
+async def classifier_unavailable_handler(request: Request, exc: ClassifierUnavailableError):
+    return JSONResponse(status_code=503, content={"detail": str(exc)})
+
+
+@app.exception_handler(ClassifierPredictionError)
+async def classifier_prediction_handler(request: Request, exc: ClassifierPredictionError):
+    return JSONResponse(status_code=503, content={"detail": str(exc)})
+
+
+app.include_router(system_router, prefix="/api")
+app.include_router(history_router, prefix="/api")

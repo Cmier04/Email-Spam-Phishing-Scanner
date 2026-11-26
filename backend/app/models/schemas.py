@@ -4,8 +4,8 @@ from pydantic import BaseModel, Field, field_validator
 
 
 class EmailClassificationRequest(BaseModel):
-    subject: str
-    body: str
+    subject: str = Field(max_length=1000)
+    body: str = Field(max_length=100_000)
 
     @field_validator("subject", "body")
     @classmethod
@@ -68,6 +68,8 @@ class GmailMessageResponse(EmailClassificationResponse):
 
 
 class GmailConnectionResponse(BaseModel):
+    display_name: str | None = None
+    avatar_available: bool = False
     state: Literal["disconnected", "connecting", "connected", "failed", "cancelled"]
     connected: bool
     email: str | None = None
@@ -100,8 +102,8 @@ class DemoEmailResponse(EmailClassificationResponse):
 
 
 class WhatIfTransformationRequest(BaseModel):
-    part: str
-    transformation_id: str
+    part: str = Field(max_length=60)
+    transformation_id: str = Field(max_length=100)
 
     @field_validator("part", "transformation_id")
     @classmethod
@@ -113,8 +115,8 @@ class WhatIfTransformationRequest(BaseModel):
 
 
 class WhatIfRequest(BaseModel):
-    email_id: str
-    transformations: list[WhatIfTransformationRequest] = Field(min_length=1)
+    email_id: str = Field(max_length=256)
+    transformations: list[WhatIfTransformationRequest] = Field(min_length=1, max_length=12)
     include_summary: bool = True
     ai_mode: Literal["automatic", "require_qwen"] = "automatic"
 

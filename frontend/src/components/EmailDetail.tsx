@@ -1,5 +1,7 @@
 
 import { useState } from "react";
+import type { LabSession } from "../api";
+import ClassificationFeedbackDialog from "./ClassificationFeedbackDialog";
 import LearningLab from "./LearningLab";
 import { withHeaderCrossfade } from "../data/headerCrossfade";
 
@@ -19,6 +21,7 @@ type EmailDetailProps = {
   email: Email;
   onBack: () => void;
   onOpenMenu: () => void;
+  resumedLab?: LabSession | null;
 };
 
 const toneStyles: Record<Email["tone"], string> = {
@@ -33,8 +36,10 @@ function EmailDetail({
   email,
   onBack,
   onOpenMenu,
+  resumedLab,
 }: EmailDetailProps) {
-  const [labActive, setLabActive] = useState(false);
+  const [labActive, setLabActive] = useState(Boolean(resumedLab));
+  const [reportOpen, setReportOpen] = useState(false);
   const isThreat = 
     email.classification === "Potential threat";
   const securityAnalysis = email.securityAnalysis;
@@ -321,14 +326,9 @@ function EmailDetail({
               </button>
             </section>
 
-            {/* Feedback will be implemented later. */}
-            <button
-              type="button"
-              disabled
-              className="flex w-full cursor-not-allowed items-center justify-center gap-2 rounded-xl border border-[#dfe3eb] bg-white py-3 text-sm font-semibold text-[#596579] opacity-60"
-            >
-              <Flag size={16} />
-              Report incorrect classification
+            <button type="button" onClick={() => setReportOpen(true)}
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#3157d5] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#284bc0] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#3157d5]">
+              <Flag size={16} /> Report incorrect classification
             </button>
           </div>
         </div>
@@ -338,10 +338,12 @@ function EmailDetail({
         <LearningLab
           email={email}
           active={labActive}
+          initialSession={resumedLab?.snapshot}
           onBack={() => withHeaderCrossfade(() => setLabActive(false))}
           onOpenMenu={onOpenMenu}
         />
       </div>
+      {reportOpen && <ClassificationFeedbackDialog email={email} onClose={() => setReportOpen(false)}/>}
     </>
   );
 }

@@ -13,6 +13,7 @@ import EmailResultsTable from "./components/EmailResultsTable";
 import ScanResultsPage from "./components/ScanResultsPage";
 import EmailDetail from "./components/EmailDetail";
 import SettingsPage from "./components/SettingsPage";
+import LabHistoryPage from "./components/LabHistoryPage";
 import HelpCenterPage from "./components/HelpCenterPage";
 import StartupScreen from "./components/StartupScreen";
 import ConnectionIssueDialog from "./components/ConnectionIssueDialog";
@@ -25,6 +26,7 @@ import {
   getGmailStatus,
   getRecentGmailEmails,
   type GmailConnectionStatus,
+  type LabSession,
 } from "./api";
 import type { Email } from "./data/mockEmails";
 import {
@@ -66,6 +68,7 @@ function App() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [activePage, setActivePage] = useState<AppPage>("dashboard");
   const [selectedEmail, setSelectedEmail] = useState<Email | null>(null);
+  const [resumedLab, setResumedLab] = useState<LabSession | null>(null);
 
   const [emailMode, setEmailMode] = useState<EmailMode>("gmail");
   const [demoEmails, setDemoEmails] = useState<Email[]>([]);
@@ -402,11 +405,13 @@ function App() {
     withHeaderCrossfade(() => {
       setActivePage(page);
       setSelectedEmail(null);
+      setResumedLab(null);
     });
     window.scrollTo(0, 0);
   }
 
   function openEmail(email: Email) {
+    setResumedLab(null);
     withHeaderCrossfade(() => setSelectedEmail(email));
     window.scrollTo(0, 0);
   }
@@ -430,6 +435,9 @@ function App() {
         activePage={activePage}
         onNavigate={navigate}
         collapsed={sidebarCollapsed}
+        accountName={gmailStatus?.connected ? gmailStatus.display_name || gmailStatus.email?.split("@")[0] : null}
+        accountEmail={gmailStatus?.connected ? gmailStatus.email : null}
+        accountAvatar={Boolean(gmailStatus?.connected && gmailStatus.avatar_available)}
       />
 
       {/* Main content adjusts when the sidebar collapses. */}
@@ -444,6 +452,7 @@ function App() {
         {selectedEmail ? (
           <EmailDetail
             email={selectedEmail}
+            resumedLab={resumedLab}
             onBack={() => withHeaderCrossfade(() => setSelectedEmail(null))}
             onOpenMenu={() => setSidebarOpen(true)}
           />
@@ -453,6 +462,12 @@ function App() {
             onGmailStatusChange={onGmailStatusChange}
             onBackendError={onSettingsBackendError}
           />
+        ) : activePage === "history" ? (
+          <LabHistoryPage onOpenMenu={() => setSidebarOpen(true)} onResume={(session) => {
+            setResumedLab(session);
+            setSelectedEmail(session.snapshot.email);
+            window.scrollTo(0, 0);
+          }} />
         ) : activePage === "help" ? (
           <HelpCenterPage
             onOpenMenu={() => setSidebarOpen(true)}
@@ -505,7 +520,7 @@ function App() {
                 <div className="mb-7 flex flex-wrap items-end justify-between gap-4">
                   <div>
                     <h2 className="text-[26px] font-bold tracking-tight text-[#17213c]">
-                      {greetingForTime(new Date(now))} John Doe,
+                      {greetingForTime(new Date(now))} {gmailStatus?.connected ? (gmailStatus.display_name || gmailStatus.email?.split("@")[0]) : "there"},
                     </h2>
 
                     <p className="mt-1 text-sm text-[#747e93]">

@@ -69,6 +69,8 @@ export type GmailConnectionStatus = {
   state: "disconnected" | "connecting" | "connected" | "failed" | "cancelled";
   connected: boolean;
   email: string | null;
+  display_name?: string | null;
+  avatar_available?: boolean;
   error: string | null;
   credentials_configured: boolean;
 };
@@ -130,7 +132,7 @@ async function requestJson(
     if (options.signal?.aborted) throw error;
 
     throw new ApiError(
-      "Cannot reach FastAPI. Start the backend on http://127.0.0.1:8000 and try again.",
+      "Cannot reach the PhisLab backend. In the desktop app, check whether its local service started successfully.",
       0
     );
   }
@@ -496,6 +498,8 @@ export async function runWhatIf(
 export type LocalAIStatus = {
   enabled: boolean;
   model_file_available: boolean;
+  runtime_available?: boolean;
+  disabled_reason?: string | null;
   configured_for_gpu: boolean;
   gpu_layers: number;
   threads: number;
@@ -584,4 +588,185 @@ export function runPythonTest(testId: string): Promise<PythonTestResult> {
     headers: { "Content-Type": "application/json", "X-PhishLab-Local-Tests": "run" },
     body: JSON.stringify({ test_id: testId }),
   }) as Promise<PythonTestResult>;
+}
+
+
+// Setup/readiness diagnostics are deliberately non-sensitive: no OAuth tokens,
+// email content, filesystem paths, or model internals are included.
+export type SystemReadiness = {
+  status: "ready" | "setup_required";
+  classifier_ready: boolean;
+  qwen_enabled: boolean;
+  qwen_model_available: boolean;
+  gmail_credentials_configured: boolean;
+  message: string;
+};
+
+export async function getSystemReadiness(signal?: AbortSignal): Promise<SystemReadiness> {
+  const value = await requestJson("/api/system/status", { signal });
+  if (!isRecord(value) ||
+    (value.status !== "ready" && value.status !== "setup_required") ||
+    typeof value.classifier_ready !== "boolean" ||
+    typeof value.qwen_enabled !== "boolean" ||
+    typeof value.qwen_model_available !== "boolean" ||
+    typeof value.gmail_credentials_configured !== "boolean" ||
+    typeof value.message !== "string") {
+    throw new ApiError("The system readiness response is incompatible.", 200);
+  }
+  return value as SystemReadiness;
+}
+
+// Local, opt-in scan history. These APIs never return stored email bodies,
+// attachment contents, OAuth credentials, or raw Gmail message identifiers.
+export type ScanHistoryStatus = {
+  configured: boolean;
+  available: boolean;
+  backend: "mysql" | "sqlite" | null;
+  enabled: boolean;
+  retention_days: 30 | 90 | 365;
+  entry_count: number;
+};
+
+export type ScanHistoryEntry = {
+  id: number;
+  source: "gmail" | "demo";
+  sender: string;
+  subject: string;
+  classification: "Legitimate" | "Potential threat";
+  confidence: number;
+  malicious_probability: number;
+  scan_count: number;
+  first_scanned_at: string;
+  last_scanned_at: string;
+  feedback_verdict: "correct" | "incorrect" | "unsure" | null;
+  feedback_note: string;
+};
+
+function isScanHistoryStatus(value: unknown): value is ScanHistoryStatus {
+  return isRecord(value) && typeof value.configured === "boolean" &&
+    typeof value.available === "boolean" && typeof value.enabled === "boolean" &&
+    (value.backend === "mysql" || value.backend === "sqlite" || value.backend === null) &&
+    [30, 90, 365].includes(Number(value.retention_days)) &&
+    typeof value.entry_count === "number";
+}
+
+function isScanHistoryEntry(value: unknown): value is ScanHistoryEntry {
+  return isRecord(value) && typeof value.id === "number" && Number.isSafeInteger(value.id) && value.id > 0 &&
+    (value.source === "gmail" || value.source === "demo") &&
+    typeof value.sender === "string" && typeof value.subject === "string" &&
+    isClassification(value.classification) && isProbability(value.confidence) &&
+    isProbability(value.malicious_probability) &&
+    typeof value.scan_count === "number" &&
+    typeof value.first_scanned_at === "string" &&
+    typeof value.last_scanned_at === "string" &&
+    (value.feedback_verdict === null || ["correct", "incorrect", "unsure"].includes(String(value.feedback_verdict))) &&
+    typeof value.feedback_note === "string";
+}
+
+export async function getHistoryStatus(signal?: AbortSignal): Promise<ScanHistoryStatus> {
+  const result = await requestJson("/api/history/status", { signal });
+  if (!isScanHistoryStatus(result)) throw new ApiError("Invalid history status response.", 200);
+  return result;
+}
+
+export async function updateHistorySettings(enabled: boolean, retention_days: 30 | 90 | 365): Promise<ScanHistoryStatus> {
+  const result = await requestJson("/api/history/settings", {
+    method: "PUT", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ enabled, retention_days }),
+  });
+  if (!isScanHistoryStatus(result)) throw new ApiError("Invalid history settings response.", 200);
+  return result;
+}
+
+export async function getHistoryScans(limit = 50, offset = 0, signal?: AbortSignal): Promise<{ items: ScanHistoryEntry[]; total: number }> {
+  const result = await requestJson(`/api/history/scans?limit=${limit}&offset=${offset}`, { signal });
+  if (!isRecord(result) || !Array.isArray(result.items) || !result.items.every(isScanHistoryEntry) ||
+      typeof result.total !== "number") throw new ApiError("Invalid scan history response.", 200);
+  return result as { items: ScanHistoryEntry[]; total: number };
+}
+
+export async function saveScanFeedback(scanId: number, verdict: "correct" | "incorrect" | "unsure", note: string): Promise<void> {
+  await requestJson(`/api/history/scans/${scanId}/feedback`, {
+    method: "PUT", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ verdict, note }),
+  });
+}
+
+export async function deleteHistoryScan(scanId: number): Promise<void> {
+  await requestJson(`/api/history/scans/${scanId}`, { method: "DELETE" });
+}
+
+export async function clearScanHistory(): Promise<void> {
+  await requestJson("/api/history/scans", { method: "DELETE" });
+}
+
+export async function exportScanHistory(): Promise<number> {
+  const all: ScanHistoryEntry[] = [];
+  let total = 0;
+  do {
+    const page = await getHistoryScans(100, all.length);
+    total = page.total;
+    all.push(...page.items);
+    if (page.items.length === 0) break;
+    if (all.length >= 10000 && all.length < total) {
+      throw new ApiError("History exceeds 10,000 records. Reduce retention or export in smaller groups.", 400);
+    }
+  } while (all.length < total);
+  const labs: LabSession[] = [];
+  const summaries: LabSessionSummary[] = [];
+  let labTotal = 0;
+  do {
+    const page = await getLabSessions(100, summaries.length);
+    labTotal = page.total;
+    summaries.push(...page.items);
+    if (!page.items.length) break;
+    if (summaries.length >= 10000 && summaries.length < labTotal)
+      throw new ApiError("Lab history exceeds 10,000 records. Export a smaller set.", 400);
+  } while (summaries.length < labTotal);
+  for (const item of summaries) labs.push(await getLabSession(item.id));
+  const blob = new Blob([JSON.stringify({ exported_at: new Date().toISOString(), scans: all, labs }, null, 2)], {
+    type: "application/json",
+  });
+  const address = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = address;
+  link.download = `phislab-history-${new Date().toISOString().slice(0, 10)}.json`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(address), 1000);
+  return all.length;
+}
+
+
+// Lab History saves explicitly opted-in educational copies locally; it never
+// edits the message in Gmail and does not include OAuth tokens or live URLs.
+export type LabSessionSnapshot = {
+  email: Email;
+  experiment: WhatIfResponse;
+  changes: { part: string; id: string }[];
+  selected_part: string;
+};
+export type LabSessionSummary = {
+  id: number; source: "gmail" | "demo"; subject: string; sender: string;
+  updated_at: string; revision: number;
+};
+export type LabSession = {id: number; updated_at: string; revision: number; snapshot: LabSessionSnapshot};
+
+export async function getLabSessions(limit = 40, offset = 0): Promise<{items: LabSessionSummary[]; total: number}> {
+  return await requestJson(`/api/history/labs?limit=${limit}&offset=${offset}`) as {items: LabSessionSummary[]; total: number};
+}
+export async function getLabSession(id: number): Promise<LabSession> {
+  return await requestJson(`/api/history/labs/${id}`) as LabSession;
+}
+export async function saveLabSession(snapshot: LabSessionSnapshot): Promise<{saved: boolean; id: number}> {
+  return await requestJson("/api/history/labs", {method: "PUT", headers: {"Content-Type": "application/json"}, body: JSON.stringify(snapshot)}) as {saved: boolean; id: number};
+}
+export async function deleteLabSession(id: number): Promise<void> {
+  await requestJson(`/api/history/labs/${id}`, {method: "DELETE"});
+}
+export async function saveEmailFeedback(source: "gmail" | "demo", emailId: string,
+  verdict: "correct" | "incorrect" | "unsure", note: string): Promise<void> {
+  await requestJson("/api/history/feedback/by-email", {method: "POST",
+    headers: {"Content-Type": "application/json"}, body: JSON.stringify({source, email_id: emailId, verdict, note})});
 }

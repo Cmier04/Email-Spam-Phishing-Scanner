@@ -9,6 +9,8 @@ from email.utils import parseaddr
 from html import unescape
 from html.parser import HTMLParser
 import re
+import os
+import tempfile
 from urllib.parse import urlsplit
 from pathlib import Path
 import threading
@@ -19,19 +21,22 @@ from app.services.classifier_service import classify_email
 from app.services.email_analysis_service import analyze_email
 
 
-GMAIL_SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
+GMAIL_SCOPES = ["https://www.googleapis.com/auth/gmail.readonly", "openid", "https://www.googleapis.com/auth/userinfo.email", "https://www.googleapis.com/auth/userinfo.profile"]
 BACKEND_DIR = Path(__file__).resolve().parents[2]
-CREDENTIALS_PATH = BACKEND_DIR / "credentials.json"
-TOKEN_PATH = BACKEND_DIR / "token.json"
+CREDENTIALS_PATH = Path(os.getenv("PHISHLAB_GMAIL_CREDENTIALS_PATH", str(BACKEND_DIR / "credentials.json"))).expanduser()
+TOKEN_PATH = Path(os.getenv("PHISHLAB_GMAIL_TOKEN_PATH", str(BACKEND_DIR / "token.json"))).expanduser()
 MAX_MESSAGES = 50
 OAUTH_TIMEOUT_SECONDS = 300
 
 _connection_lock = threading.Lock()
+_credentials_lock = threading.RLock()
 _connection_attempt_id: str | None = None
 _connection_status: dict[str, Any] = {
     "state": "disconnected",
     "connected": False,
     "email": None,
+    "display_name": None,
+    "avatar_available": False,
     "error": None,
 }
 
@@ -68,7 +73,7 @@ class GmailMessageNotFoundError(GmailServiceError):
 def _gmail_imports() -> dict[str, Any]:
     """Load optional Google dependencies without exposing their internals."""
     try:
-        from google.auth.exceptions import RefreshError
+        from google.auth.exceptions import RefreshError, TransportError
         from google.auth.transport.requests import Request
         from google.oauth2.credentials import Credentials
         from google_auth_oauthlib.flow import InstalledAppFlow
@@ -80,6 +85,7 @@ def _gmail_imports() -> dict[str, Any]:
 
     return {
         "RefreshError": RefreshError,
+        "TransportError": TransportError,
         "Request": Request,
         "Credentials": Credentials,
         "InstalledAppFlow": InstalledAppFlow,
@@ -88,39 +94,77 @@ def _gmail_imports() -> dict[str, Any]:
 
 
 def _save_credentials(credentials: Any) -> None:
-    """Replace the local token file without returning credential data."""
-    temporary_path = TOKEN_PATH.with_name(f"{TOKEN_PATH.name}.tmp")
-    temporary_path.write_text(credentials.to_json(), encoding="utf-8")
-    temporary_path.replace(TOKEN_PATH)
+    """Write OAuth tokens atomically, with owner-only permissions when supported."""
+    with _credentials_lock:
+        temporary_path = None
+        try:
+            descriptor, temporary_name = tempfile.mkstemp(
+                prefix=f".{TOKEN_PATH.name}.", suffix=".tmp", dir=TOKEN_PATH.parent
+            )
+            temporary_path = Path(temporary_name)
+            with os.fdopen(descriptor, "w", encoding="utf-8") as file:
+                file.write(credentials.to_json())
+                file.flush()
+                os.fsync(file.fileno())
+            temporary_path.replace(TOKEN_PATH)
+            # mkstemp gives 0600 on POSIX; reinforce it if an older token was replaced.
+            if os.name == "posix":
+                TOKEN_PATH.chmod(0o600)
+        except OSError as exc:
+            raise GmailAuthenticationError("Could not save local Gmail authorization.") from exc
+        finally:
+            if temporary_path is not None:
+                temporary_path.unlink(missing_ok=True)
 
 
 def _load_existing_credentials() -> Any | None:
-    """Load and refresh saved credentials without starting interactive OAuth."""
-    if not TOKEN_PATH.is_file():
-        return None
+    """Read saved authorization and distinguish an expired token from an outage."""
+    with _credentials_lock:
+        if not TOKEN_PATH.is_file():
+            return None
 
-    google = _gmail_imports()
-    refresh_error = google["RefreshError"]
+        google = _gmail_imports()
+        refresh_error = google["RefreshError"]
+        transport_error = google.get("TransportError", ConnectionError)
+        try:
+            if os.name == "posix":
+                TOKEN_PATH.chmod(0o600)
+            credentials = google["Credentials"].from_authorized_user_file(
+                str(TOKEN_PATH), GMAIL_SCOPES
+            )
+        except (OSError, ValueError, TypeError, KeyError) as exc:
+            raise GmailAuthenticationError(
+                "Saved Gmail authorization is invalid. Connect Gmail again."
+            ) from exc
 
-    try:
-        credentials = google["Credentials"].from_authorized_user_file(
-            str(TOKEN_PATH), GMAIL_SCOPES
-        )
         if credentials.expired and credentials.refresh_token:
-            credentials.refresh(google["Request"]())
-            _save_credentials(credentials)
-
+            try:
+                credentials.refresh(google["Request"]())
+                _save_credentials(credentials)
+            except refresh_error as exc:
+                raise GmailAuthenticationError(
+                    "Saved Gmail authorization has expired. Connect Gmail again."
+                ) from exc
+            except (transport_error, TimeoutError) as exc:
+                raise GmailAPIError(
+                    "Gmail authentication service could not be reached. Please retry."
+                ) from exc
         if not credentials.valid:
             raise GmailAuthenticationError(
                 "Saved Gmail authorization is expired or invalid. Connect Gmail again."
             )
         return credentials
-    except GmailAuthenticationError:
-        raise
-    except (OSError, ValueError, refresh_error) as exc:
-        raise GmailAuthenticationError(
-            "Saved Gmail authorization is expired or invalid. Connect Gmail again."
-        ) from exc
+
+
+def _gmail_api_failure(exc: Exception, message: str) -> GmailServiceError:
+    """Separate expired/denied credentials from transient remote API errors."""
+    response = getattr(exc, "resp", None)
+    status = getattr(response, "status", None)
+    if status in (401, 403):
+        return GmailAuthenticationError(
+            "Gmail authorization was rejected. Reconnect the account from Settings."
+        )
+    return GmailAPIError(message)
 
 
 def _build_gmail_service(credentials: Any) -> Any:
@@ -143,7 +187,83 @@ def _get_account_email(service: Any) -> str | None:
         email = profile.get("emailAddress") if isinstance(profile, dict) else None
         return email if isinstance(email, str) and email else None
     except Exception as exc:
-        raise GmailAPIError("Unable to verify the connected Gmail account.") from exc
+        raise _gmail_api_failure(exc, "Unable to verify the connected Gmail account.") from exc
+
+
+# Profile pictures are fetched through the local API so the Electron renderer
+# never needs permission to contact arbitrary external image hosts.
+_profile_lock = threading.Lock()
+_profile_cache: dict[str, Any] = {"email": None, "name": None, "picture": None, "at": 0.0}
+
+
+def _google_identity(credentials: Any, email: str | None) -> tuple[str | None, bool]:
+    """Best-effort OpenID identity. Old Gmail-only tokens fall back to email.
+
+    Only the fixed Google UserInfo endpoint is contacted. No token, photo URL
+    or other Google profile attributes are persisted to disk.
+    """
+    from time import monotonic
+    fallback = email.split("@", 1)[0] if email else None
+    if not email or not getattr(credentials, "token", None):
+        return fallback, False
+    with _profile_lock:
+        if _profile_cache["email"] == email and monotonic() - _profile_cache["at"] < 300:
+            return _profile_cache["name"] or fallback, bool(_profile_cache["picture"])
+    name, picture = fallback, None
+    try:
+        from google.auth.transport.requests import AuthorizedSession
+        response = AuthorizedSession(credentials).get(
+            "https://openidconnect.googleapis.com/v1/userinfo", timeout=4
+        )
+        if response.status_code == 200:
+            data = response.json()
+            if isinstance(data, dict) and data.get("email") == email:
+                name_candidate = data.get("name")
+                if isinstance(name_candidate, str) and 0 < len(name_candidate.strip()) <= 120:
+                    name = name_candidate.strip()
+                photo = data.get("picture")
+                if isinstance(photo, str) and _approved_avatar_url(photo):
+                    picture = photo
+    except Exception:
+        # An old Gmail-only grant or temporary connectivity failure must not
+        # break scanning; reconnecting grants the new optional profile scopes.
+        pass
+    with _profile_lock:
+        _profile_cache.update(email=email, name=name, picture=picture, at=monotonic())
+    return name, bool(picture)
+
+
+def _approved_avatar_url(url: str) -> bool:
+    try:
+        parsed = urlsplit(url)
+        host = (parsed.hostname or "").lower()
+        return (parsed.scheme == "https" and parsed.username is None and
+                parsed.password is None and parsed.port in (None, 443) and
+                (host == "googleusercontent.com" or host.endswith(".googleusercontent.com")))
+    except ValueError:
+        return False
+
+
+def get_google_avatar() -> tuple[bytes, str] | None:
+    """Fetch only a trusted Google-hosted image with a strict byte limit."""
+    with _profile_lock:
+        url = _profile_cache.get("picture")
+    if not isinstance(url, str) or not _approved_avatar_url(url):
+        return None
+    try:
+        import requests
+        with requests.get(url, timeout=5, stream=True, allow_redirects=False) as response:
+            if response.status_code != 200 or response.headers.get("content-type", "").split(";")[0] not in ("image/png", "image/jpeg", "image/webp"):
+                return None
+            chunks, total = [], 0
+            for chunk in response.iter_content(chunk_size=16384):
+                total += len(chunk)
+                if total > 512_000:
+                    return None
+                chunks.append(chunk)
+            return b"".join(chunks), response.headers["content-type"].split(";")[0]
+    except Exception:
+        return None
 
 
 def _status_payload() -> dict[str, Any]:
@@ -165,21 +285,23 @@ def get_gmail_connection_status() -> dict[str, Any]:
             with _connection_lock:
                 if _connection_status["state"] not in {"failed", "cancelled"}:
                     _connection_status.update(
-                        state="disconnected", connected=False, email=None, error=None
+                        state="disconnected", connected=False, email=None, display_name=None, avatar_available=False, error=None
                     )
                 return _status_payload()
 
         service = _build_gmail_service(credentials)
         email = _get_account_email(service)
+        display_name, avatar_available = _google_identity(credentials, email)
         with _connection_lock:
             _connection_status.update(
-                state="connected", connected=True, email=email, error=None
+                state="connected", connected=True, email=email,
+                display_name=display_name, avatar_available=avatar_available, error=None
             )
             return _status_payload()
     except GmailServiceError as exc:
         with _connection_lock:
             _connection_status.update(
-                state="failed", connected=False, email=None, error=str(exc)
+                state="failed", connected=False, email=None, display_name=None, avatar_available=False, error=str(exc)
             )
             return _status_payload()
 
@@ -211,13 +333,15 @@ def _complete_oauth_connection(attempt_id: str) -> None:
                 return
 
         email = _get_account_email(_build_gmail_service(credentials))
+        display_name, avatar_available = _google_identity(credentials, email)
         with _connection_lock:
             if _connection_attempt_id != attempt_id:
                 return
             _save_credentials(credentials)
             _connection_attempt_id = None
             _connection_status.update(
-                state="connected", connected=True, email=email, error=None
+                state="connected", connected=True, email=email,
+                display_name=display_name, avatar_available=avatar_available, error=None
             )
     except Exception as exc:
         with _connection_lock:
@@ -231,7 +355,7 @@ def _complete_oauth_connection(attempt_id: str) -> None:
             else:
                 message = "Gmail authorization failed. Please try again."
             _connection_status.update(
-                state="failed", connected=False, email=None, error=message
+                state="failed", connected=False, email=None, display_name=None, avatar_available=False, error=message
             )
 
 
@@ -252,7 +376,7 @@ def connect_gmail_account() -> dict[str, Any]:
             return _status_payload()
         _connection_attempt_id = attempt_id
         _connection_status.update(
-            state="connecting", connected=False, email=None, error=None
+            state="connecting", connected=False, email=None, display_name=None, avatar_available=False, error=None
         )
         status = _status_payload()
 
@@ -269,20 +393,25 @@ def disconnect_gmail_account() -> dict[str, Any]:
     """Remove local authorization; this does not revoke permission at Google."""
     global _connection_attempt_id
 
+    with _profile_lock:
+        _profile_cache.update(email=None, name=None, picture=None, at=0.0)
     with _connection_lock:
         was_connecting = _connection_status["state"] == "connecting"
         _connection_attempt_id = None
-        for path in (TOKEN_PATH, TOKEN_PATH.with_name(f"{TOKEN_PATH.name}.tmp")):
-            try:
-                path.unlink(missing_ok=True)
-            except OSError as exc:
-                raise GmailAuthenticationError(
-                    "Could not remove the local Gmail authorization."
-                ) from exc
+        with _credentials_lock:
+            for path in (TOKEN_PATH, TOKEN_PATH.with_name(f"{TOKEN_PATH.name}.tmp")):
+                try:
+                    path.unlink(missing_ok=True)
+                except OSError as exc:
+                    raise GmailAuthenticationError(
+                        "Could not remove the local Gmail authorization."
+                    ) from exc
         _connection_status.update(
             state="cancelled" if was_connecting else "disconnected",
             connected=False,
             email=None,
+            display_name=None,
+            avatar_available=False,
             error=None,
         )
         return _status_payload()
@@ -447,7 +576,7 @@ def get_recent_messages(max_results: int = 10, service: Any | None = None) -> li
             if isinstance(message_ref, dict) and message_ref.get("id")
         ]
     except Exception as exc:
-        raise GmailAPIError("Unable to retrieve messages from Gmail.") from exc
+        raise _gmail_api_failure(exc, "Unable to retrieve messages from Gmail.") from exc
 
 
 def get_latest_message(service: Any | None = None) -> dict:
@@ -484,7 +613,7 @@ def get_message_by_id(message_id: str, service: Any | None = None) -> dict:
             raise GmailMessageNotFoundError(
                 f"Gmail message '{message_id}' was not found."
             ) from exc
-        raise GmailAPIError("Unable to retrieve the Gmail message.") from exc
+        raise _gmail_api_failure(exc, "Unable to retrieve the Gmail message.") from exc
 
 
 def _decode_mime_header(value: str) -> str:

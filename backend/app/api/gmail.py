@@ -1,15 +1,17 @@
 """FastAPI routes for local Gmail account management and message scanning."""
 
+import logging
 from ipaddress import ip_address
 from urllib.parse import urlsplit
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 
 from app.models.schemas import (
     GmailConnectionResponse,
     GmailDisconnectResponse,
     GmailMessageResponse,
 )
+from app.services.classifier_service import ClassifierUnavailableError, ClassifierPredictionError
 from app.services.gmail_service import (
     GmailAPIError,
     GmailAuthenticationError,
@@ -18,12 +20,24 @@ from app.services.gmail_service import (
     connect_gmail_account,
     disconnect_gmail_account,
     get_gmail_connection_status,
+    get_google_avatar,
     scan_latest_message,
     scan_recent_messages,
 )
 
 
 router = APIRouter(prefix="/gmail", tags=["gmail"])
+LOGGER = logging.getLogger(__name__)
+
+
+def _record_scan_results(records: list[dict]) -> None:
+    """Do not let optional storage errors interrupt actual Gmail scans."""
+    from app.services.scan_history_service import HistoryUnavailable, record_scans
+    try:
+        record_scans(records, "gmail")
+    except HistoryUnavailable:
+        LOGGER.warning("Optional scan history unavailable; Gmail scan still succeeded.")
+
 ALLOWED_BROWSER_ORIGINS = {
     "http://localhost:5173",
     "http://127.0.0.1:5173",
@@ -54,6 +68,8 @@ def require_local_state_change(request: Request) -> None:
 
 
 def _raise_http_error(error: Exception) -> None:
+    if isinstance(error, (ClassifierUnavailableError, ClassifierPredictionError)):
+        raise error  # Handled centrally with safe status and message.
     if isinstance(error, GmailConfigurationError):
         raise HTTPException(status_code=503, detail=str(error)) from error
     if isinstance(error, NoGmailMessagesError):
@@ -74,7 +90,8 @@ def _raise_http_error(error: Exception) -> None:
     ) from error
 
 
-@router.get("/status", response_model=GmailConnectionResponse)
+@router.get("/status", response_model=GmailConnectionResponse,
+            dependencies=[Depends(require_local_state_change)])
 def gmail_connection_status():
     return get_gmail_connection_status()
 
@@ -107,17 +124,34 @@ def disconnect_gmail():
         _raise_http_error(error)
 
 
-@router.get("/latest", response_model=GmailMessageResponse)
+@router.get("/latest", response_model=GmailMessageResponse,
+            dependencies=[Depends(require_local_state_change)])
 def latest_gmail_message():
     try:
-        return scan_latest_message()
+        result = scan_latest_message()
+        _record_scan_results([result])
+        return result
     except Exception as error:
         _raise_http_error(error)
 
 
-@router.get("/recent", response_model=list[GmailMessageResponse])
+@router.get("/recent", response_model=list[GmailMessageResponse],
+            dependencies=[Depends(require_local_state_change)])
 def recent_gmail_messages(limit: int = Query(default=10, ge=1, le=50)):
     try:
-        return scan_recent_messages(max_results=limit)
+        results = scan_recent_messages(max_results=limit)
+        _record_scan_results(results)
+        return results
     except Exception as error:
         _raise_http_error(error)
+
+
+@router.get("/avatar", dependencies=[Depends(require_local_state_change)])
+def gmail_avatar() -> Response:
+    if not get_gmail_connection_status().get("connected"):
+        raise HTTPException(status_code=404, detail="No connected Gmail profile.")
+    image = get_google_avatar()
+    if not image:
+        raise HTTPException(status_code=404, detail="Google profile picture unavailable.")
+    content, mime = image
+    return Response(content=content, media_type=mime, headers={"Cache-Control": "private, max-age=60", "X-Content-Type-Options": "nosniff"})

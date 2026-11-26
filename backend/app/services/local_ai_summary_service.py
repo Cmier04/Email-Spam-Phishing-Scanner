@@ -320,6 +320,11 @@ class _ModelWorker:
 _WORKER = _ModelWorker()
 atexit.register(_WORKER.shutdown)
 
+
+def reset_local_ai_worker() -> None:
+    """Release model memory and old rewrite cache after settings updates."""
+    _WORKER.shutdown()
+
 # Avoid copying model-created numbers, URLs, executable markup, or unsupported
 # model claims into a security-oriented explanation. This is a best-effort
 # guard; it cannot prove that an LLM sentence is factually correct.
@@ -387,11 +392,26 @@ def get_local_ai_status() -> dict[str, Any]:
     """Configuration diagnostics only: no GGUF loading, email or file path leakage."""
     settings = get_local_ai_settings()
     exists = settings.model_path.is_file() and settings.model_path.suffix.lower() == ".gguf"
+    from app.services.device_ai_settings import _runtime_available, read_override
+    runtime_ok = _runtime_available()
+    manual_disabled = read_override().get('mode') == 'manual' and not read_override().get('enabled', True)
+    if not exists:
+        reason = 'Qwen model file missing from the configured model location.'
+    elif not runtime_ok:
+        reason = 'llama-cpp-python is not installed in the Python backend environment.'
+    elif manual_disabled:
+        reason = 'Qwen disabled by the manual override in Settings.'
+    elif not settings.enabled:
+        reason = 'Qwen disabled by environment configuration.'
+    else:
+        reason = None
     from app.services.device_ai_settings import resolved_ai_configuration
 
     return {
         "enabled": settings.enabled,
         "model_file_available": exists,
+        "runtime_available": runtime_ok,
+        "disabled_reason": reason,
         "configured_for_gpu": settings.gpu_layers != 0,
         "gpu_layers": settings.gpu_layers,
         "threads": settings.threads,

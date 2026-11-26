@@ -18,7 +18,7 @@ from threading import Lock
 from typing import Any
 
 _ROOT = Path(__file__).resolve().parents[2]
-_SETTINGS_FILE = _ROOT / '.local-ai-settings.json'
+_SETTINGS_FILE = Path(os.getenv('PHISHLAB_AI_SETTINGS_PATH', str(_ROOT / '.local-ai-settings.json'))).expanduser()
 _LOCK = Lock()
 _FIELDS = {
     'gpu_layers': (-1, 200), 'threads': (1, 32),

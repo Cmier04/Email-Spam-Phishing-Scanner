@@ -1,28 +1,42 @@
 {
-  "name": "email-spam-phishing-scanner",
-  "version": "1.0.0",
-  "description": "A desktop application which classifies, notifies, and teaches users about spam and phishing emails using a machine learning model.",
-  "main": "electron/main.js",
+  "name": "phislab-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local desktop shell for PhisLab phishing education",
+  "main": "desktop/main.cjs",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "dev:frontend": "npm --prefix frontend run dev -- --host 127.0.0.1",
-    "desktop": "concurrently -k \"npm run dev:frontend\" \"wait-on http://127.0.0.1:5173 && electron .\""
+    "desktop:dev": "node desktop/scripts/run-dev.mjs",
+    "electron:dev": "npm run desktop:dev",
+    "desktop:preview": "npm run build:web && electron . --preview",
+    "build:web": "npm --prefix frontend run build",
+    "test:desktop": "node --test desktop/tests/*.test.cjs",
+    "backend:bundle": "python desktop/scripts/build_backend.py",
+    "release:prepare": "node desktop/scripts/prepare-release.cjs",
+    "pack:mac": "npm run build:web && npm run backend:bundle && npm run release:prepare && electron-builder --mac dmg --arm64",
+    "pack:win": "npm run build:web && npm run backend:bundle && npm run release:prepare && electron-builder --win nsis --x64",
+    "pack:linux": "npm run build:web && npm run backend:bundle && npm run release:prepare && electron-builder --linux AppImage --x64"
   },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/Cmier04/Email-Spam-Phishing-Scanner.git"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "type": "commonjs",
-  "bugs": {
-    "url": "https://github.com/Cmier04/Email-Spam-Phishing-Scanner/issues"
-  },
-  "homepage": "https://github.com/Cmier04/Email-Spam-Phishing-Scanner#readme",
   "devDependencies": {
-    "concurrently": "^10.0.6",
-    "electron": "^45.2.3",
-    "wait-on": "^9.5.1"
+    "electron": "45.5.0",
+    "electron-builder": "26.18.0"
+  },
+  "build": {
+    "appId": "edu.phislab.desktop",
+    "productName": "PhisLab",
+    "asar": true,
+    "directories": {"output": "release"},
+    "files": [
+      "desktop/*.cjs",
+      "frontend/dist/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {"from": "desktop/dist-backend/phislab-backend", "to": "backend", "filter": ["**/*"]},
+      {"from": "desktop/release-assets/models", "to": "models", "filter": ["email_classifier.pkl", "summary-qwen.gguf"]},
+      {"from": "desktop/release-assets/google", "to": "google", "filter": ["credentials.json"]}
+    ],
+    "mac": {"category": "public.app-category.education", "target": "dmg"},
+    "win": {"target": "nsis"},
+    "linux": {"category": "Education", "target": "AppImage"}
   }
 }
