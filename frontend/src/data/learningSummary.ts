@@ -106,7 +106,19 @@ export function buildLearningSummary(
       : "increased";
   const effect = `The model-estimated malicious probability ${direction} after these changes.`;
 
-  const topics = accepted.map((change) => lessons[change.id]);
+  const topics = accepted.map((change) => lessons[change.id] ?? {
+    changed: change.title,
+    takeaway: change.scope === "Message text"
+      ? "Pay attention to pressure, unexpected requests, and context. A change in wording does not establish that an email is safe."
+      : change.part === "link"
+        ? "A link's visible label does not tell you where it leads. Navigate independently before trusting a request."
+        : change.part === "attachment"
+          ? "A filename alone cannot verify that an attachment is safe."
+          : "Visual cues and sender details are helpful to inspect, but do not prove a message is trustworthy.",
+    context: change.scope === "Message text"
+      ? "Changes to the subject or body can influence the model's score, but no single word guarantees a result."
+      : "This is a display-only comparison and does not independently change the classifier's text input.",
+  });
   let explanation: string;
   if (!changedClassifierInput) {
     explanation = "These changes affected the email's displayed metadata or appearance, not the subject or body used by the current classifier. Its prediction therefore should not change from these edits alone.";
@@ -152,15 +164,7 @@ export function buildLearningSummary(
         : ["Verify unexpected email requests independently before following instructions or sharing information."],
     isBackendExplanation: Boolean(backend),
     note: backend?.source === "local_ai"
-      ? "Offline AI (local Qwen) added educational guidance to verified results. Rewrite methods are displayed separately; classifier scores and detected indicators remain authoritative."
-      : backend?.source === "dynamic"
-        ? (backend.fallback_reason === "disabled"
-          ? "Evidence-based local summary. Optional AI generation is disabled; classifier explanations are not implied."
-          : backend.fallback_reason
-            ? "Evidence-based local fallback used because the optional AI summary was unavailable or invalid. The measured classifier results remain authoritative."
-            : "Evidence-based summary created locally from actual What-If results and observed indicators. It does not explain the classifier's internal reasoning.")
-      : backend
-        ? "Summary provided by the backend. The measured classifier results appear above."
-        : "The probabilities and classifications above come from FastAPI. This fallback guidance is based on the chosen transformation, not the classifier's internal reasoning.",
+      ? "AI-generated learning guidance. It may be incomplete; always review the original message and verify unexpected requests independently."
+      : "Learning guidance based on your comparison. Detection results are estimates, not a guarantee that an email is safe or harmful.",
   };
 }

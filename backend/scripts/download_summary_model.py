@@ -15,11 +15,11 @@ import sys
 from urllib.request import Request, urlopen
 
 MODEL_URL = (
-    "https://huggingface.co/ggml-org/Qwen3-1.7B-GGUF/resolve/main/"
-    "Qwen3-1.7B-Q4_K_M.gguf"
+    "https://huggingface.co/Qwen/Qwen3-4B-GGUF/resolve/main/"
+    "Qwen3-4B-Q4_K_M.gguf"
 )
-# Published in https://huggingface.co/ggml-org/Qwen3-1.7B-GGUF/blob/main/Qwen3-1.7B-Q4_K_M.gguf
-EXPECTED_SHA256 = "d2387ca2dbfee2ffabce7120d3770dadca0b293052bc2f0e138fdc940d9bc7b5"
+# Published in https://huggingface.co/Qwen/Qwen3-4B-GGUF/blob/main/Qwen3-4B-Q4_K_M.gguf
+EXPECTED_SHA256 = "7485fe6f11af29433bc51cab58009521f205840f5b4ae3a32fa7f92e8534fdf5"
 TARGET = Path(__file__).resolve().parents[1] / "model" / "summary-qwen.gguf"
 
 
@@ -40,7 +40,7 @@ def download_model() -> int:
     total = 0
     try:
         request = Request(MODEL_URL, headers={"User-Agent": "PhishLab-Model-Setup/1.0"})
-        print("Downloading public Qwen3-1.7B Q4_K_M GGUF (~1.28 GB)...")
+        print("Downloading public Qwen3-4B Q4_K_M GGUF (~2.5 GB)...")
         with urlopen(request, timeout=60) as response, partial.open("wb") as output:
             while chunk := response.read(1024 * 1024):
                 output.write(chunk)

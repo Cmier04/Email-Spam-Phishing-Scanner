@@ -27,7 +27,7 @@ test("uses backend generated evidence-based text, preserving measured numbers", 
       what_you_should_learn: "Verify unexpected account requests independently.",
     },
   });
-  assert.match(summary.note, /Evidence-based summary created locally/);
+  assert.match(summary.note, /Learning guidance based on your comparison/);
   assert.equal(summary.isBackendExplanation, true);
   assert.equal(summary.whyItMattered, "The classifier's estimated malicious probability decreased by 80.00 percentage points.");
   assert.equal(summary.probabilityDifference, "−80.00 percentage points");
@@ -38,6 +38,6 @@ test("older backend or skipped summary still receives compatible frontend guidan
     const summary = buildLearningSummary([chosen], {...baseResult, learning_summary});
     assert.equal(summary.isBackendExplanation, false);
     assert.ok(summary.whyItMattered.length > 30);
-    assert.match(summary.note, /fallback guidance/);
+    assert.match(summary.note, /Learning guidance based on your comparison/);
   }
 });

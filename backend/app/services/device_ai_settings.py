@@ -115,13 +115,13 @@ def detect_device_profile() -> DeviceProfile:
     packaged_backend = os.getenv('PHISHLAB_BUNDLED_AI_BACKEND', '').lower()
     nvidia = system in ('Linux', 'Windows') and _nvidia_cuda_available()
     if system == 'Windows' and packaged_backend == 'cpu':
-        return DeviceProfile('cpu', 'Windows / bundled CPU runtime', 0, threads, 2048, 128, 90,
+        return DeviceProfile('cpu', 'Windows / bundled CPU runtime', 0, threads, 2048, 128, 150,
                              'cpu', 'This installer contains the CPU runtime; GPU acceleration requires a different build.')
     if system == 'Windows' and packaged_backend == 'vulkan':
         if _windows_vulkan_loader_available() and (nvidia or _windows_amd_gpu_available()):
             return DeviceProfile('windows-vulkan', 'Windows / Vulkan-compatible GPU candidate', -1, threads, 2048, 256, 75,
                                  'vulkan', 'Bundled Vulkan runtime selected. Actual GPU offload is confirmed only when Qwen loads.')
-        return DeviceProfile('cpu', 'Windows / Vulkan device unavailable', 0, threads, 2048, 128, 90,
+        return DeviceProfile('cpu', 'Windows / Vulkan device unavailable', 0, threads, 2048, 128, 150,
                              'cpu', 'The bundled Vulkan runtime will run Qwen on CPU if no usable GPU/driver is available.')
     if nvidia and packaged_backend not in ('vulkan', 'cpu'):
         return DeviceProfile('nvidia-cuda', 'NVIDIA GPU / CUDA-capable host', -1, threads, 2048, 256, 60,
@@ -130,9 +130,9 @@ def detect_device_profile() -> DeviceProfile:
         if _windows_vulkan_loader_available():
             return DeviceProfile('amd-vulkan', 'AMD Radeon / Windows Vulkan candidate', -1, threads, 2048, 256, 75,
                                  'vulkan', 'AMD display adapter and Vulkan loader detected; GPU offload requires a Vulkan-enabled runtime and usable GPU driver.')
-        return DeviceProfile('cpu', 'AMD Radeon / Vulkan loader unavailable', 0, threads, 2048, 128, 90,
+        return DeviceProfile('cpu', 'AMD Radeon / Vulkan loader unavailable', 0, threads, 2048, 128, 150,
                              'cpu', 'Install/update your AMD graphics driver to enable Vulkan; CPU inference is available.')
-    return DeviceProfile('cpu', f'{system or "Unknown"} / {machine or "unknown"}', 0, threads, 2048, 128, 90,
+    return DeviceProfile('cpu', f'{system or "Unknown"} / {machine or "unknown"}', 0, threads, 2048, 128, 150,
                          'cpu', 'CPU-only default; supported even when a GPU is not detected or its runtime is unavailable.')
 
 

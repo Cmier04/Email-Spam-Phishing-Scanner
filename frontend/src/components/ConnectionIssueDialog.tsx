@@ -72,11 +72,11 @@ export default function ConnectionIssueDialog({
         </div>
 
         <h2 id="connection-dialog-title" className="text-[22px] font-bold tracking-tight text-[#202a44]">
-          {backend ? "Backend connection issue" : connecting ? "Finish connecting Gmail" : "Connect your Google account"}
+          {backend ? "Connection issue" : connecting ? "Finish connecting Gmail" : "Connect your Google account"}
         </h2>
         <p id="connection-dialog-description" className="mt-3 text-sm leading-6 text-[#788297]">
           {backend
-            ? "PhishLab could not complete a request to its local FastAPI service. Resolve this first, then we'll check your Gmail connection."
+            ? "PhishLab could not reach its local scanning service. Check the connection, then try again."
             : connecting
               ? "Complete Google's authorization flow in the browser window. PhishLab will recognize the connection automatically."
               : "Connect Gmail to scan your inbox. PhishLab uses your existing Gmail authorization, not a separate app login."}
@@ -85,19 +85,19 @@ export default function ConnectionIssueDialog({
         {backend ? (
           <div className="mt-6 flex items-start gap-3 rounded-xl border border-[#f0cbcb] bg-[#fff5f4] p-4 text-left">
             <CircleAlert size={18} className="mt-0.5 shrink-0 text-[#c64d48]" aria-hidden="true" />
-            <p className="min-w-0 break-words text-xs font-medium leading-5 text-[#963c3a]">{message ?? "Cannot reach FastAPI."}</p>
+            <p className="min-w-0 break-words text-xs font-medium leading-5 text-[#963c3a]">{message ?? "Could not reach the local scanning service."}</p>
           </div>
         ) : message || (gmailStatus?.state === "failed" && gmailStatus.error) ? (
           <div role="alert" className="mt-6 rounded-xl bg-[#fff5f4] p-3 text-xs text-[#a33e3e]">{message ?? gmailStatus?.error}</div>
         ) : (
           <div className="mt-6 flex items-center justify-center gap-2 rounded-xl bg-[#f4f8f5] p-3 text-xs font-medium text-[#37815b]">
-            <CircleCheck size={15} /> FastAPI is available
+            <CircleCheck size={15} /> Scanner is ready
           </div>
         )}
 
         {backend && (
           <p className="mt-3 text-[11px] leading-5 text-[#8a93a5]">
-            The reconnect button retries the request. If FastAPI is stopped, start it locally in a terminal first; the browser cannot start a server process.
+            Try reconnecting. If you're running the source version, see Help center → Developer & debugging for startup instructions.
           </p>
         )}
 

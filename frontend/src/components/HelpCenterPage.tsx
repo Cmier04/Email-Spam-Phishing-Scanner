@@ -3,7 +3,9 @@ import { useMemo, useState } from "react";
 import {
   ArrowRight,
   BookOpen,
+  Code2,
   ChevronDown,
+  Cpu,
   CircleHelp,
   FlaskConical,
   Inbox,
@@ -11,6 +13,7 @@ import {
   Search,
   Settings2,
   ShieldCheck,
+  TerminalSquare,
   WifiOff,
   X,
   type LucideIcon,
@@ -29,6 +32,7 @@ const categories = [
   "Scan results",
   "Learning Lab",
   "Settings & Gmail",
+  "Privacy & history",
   "Troubleshooting",
 ] as const;
 
@@ -48,21 +52,21 @@ const questions: Question[] = [
     category: "Getting started",
     question: "What can PhishLab do right now?",
     answer:
-      "PhishLab currently loads synthetic example emails from FastAPI and classifies their subject and body using a local machine learning model. You can review scan results, open an email analysis, experiment in the Learning Lab, and save interface preferences. Live Gmail inbox scanning is not connected to this demo interface.",
+      "PhishLab helps you review potential phishing messages, compare detection results, and learn the warning signs. You can explore training emails right away, or connect Gmail with read-only access to scan recent inbox messages.",
   },
   {
     id: "first-steps",
     category: "Getting started",
     question: "How do I get started?",
     answer:
-      "Open Dashboard to see an overview of the loaded examples. Select Scan results to search and filter all available examples. Click an email row or its arrow to open Email Analysis. From there, open Learning Lab to see how supported changes affect the classifier.",
+      "Start with Training demo on the Dashboard, or connect Gmail from Settings. Open Scan results, select an email, and read its detailed analysis. Choose Learning Lab to experiment with a temporary copy and see how changes affect its assessment.",
   },
   {
     id: "where-results",
     category: "Scan results",
     question: "Where do the emails on Scan results come from?",
     answer:
-      "The page requests GET /api/demo/emails from your local FastAPI backend. These are demonstration emails evaluated by the saved classifier, not messages from a connected Gmail account or a database of past scans.",
+      "Choose Training demo to explore fictional examples, or Gmail inbox to view results from an inbox you have connected and scanned. The two sources are kept separate so practice messages are not confused with your mail.",
   },
   {
     id: "classification",
@@ -76,28 +80,28 @@ const questions: Question[] = [
     category: "Scan results",
     question: "What is the difference between confidence, malicious probability, and risk?",
     answer:
-      "Confidence describes the model's confidence in its predicted class. Malicious probability is the model's estimated probability of the malicious class. For example, a confident Legitimate prediction can have a low malicious probability. The Low, Medium, and High risk labels in this demo are example metadata, not another prediction made by the model.",
+      "Confidence describes how strongly the model favors its predicted category. Malicious probability is its estimate for the potentially harmful category. A high confidence score does not always mean a high risk score. Training examples may also include illustrative risk labels.",
   },
   {
     id: "filters",
     category: "Scan results",
     question: "How can I find a specific email?",
     answer:
-      "Open Scan results and use the search field to look up a sender, address, or subject. You can also filter by classification and demo risk, change the sort order, and move between pages. If no emails match, adjust the filters or use Clear filters.",
+      "Open Scan results and search for a sender, email address, or subject. You can filter by classification, choose a sort order, and move between pages. Use Clear filters if you want to see everything again.",
   },
   {
     id: "lab-works",
     category: "Learning Lab",
     question: "How does the Learning Lab work?",
     answer:
-      "Select an example email, open Learning Lab, choose an editable part, and apply a supported transformation. When enabled, local Qwen rewrites the subject, body, or identified request as an educational example; otherwise fixed replacements are used. The app sends an isolated modified copy to POST /api/what-if. FastAPI returns the model's original and modified predictions and malicious probabilities. Your original example remains unchanged.",
+      "Open an email, select Learning Lab, and choose a part of the message. Try a more suspicious, neutral, or less suspicious example to compare the original with a temporary copy. The app updates the learning comparison without editing, sending, or replying to the real email.",
   },
   {
     id: "lab-scores",
     category: "Learning Lab",
     question: "Why didn't the detection score change after an edit?",
     answer:
-      "The classifier primarily uses subject and body text. Some changes only affect presentation or metadata, so they may not change the model's input or prediction. Review any warnings in the Learning Lab, and try a supported subject or body transformation to compare the results.",
+      "The detection model checks subject and body text. Display names, link labels, attachment names, signatures, and spacing are useful clues for people, but a preview-only change does not change the text being scored. Also, a wording edit may not be enough to change the predicted category.",
   },
   {
     id: "lab-reset",
@@ -111,35 +115,83 @@ const questions: Question[] = [
     category: "Settings & Gmail",
     question: "Can I connect my Gmail inbox?",
     answer:
-      "Not through the current demo interface. The Settings page shows Gmail as not connected, and the Connect Gmail button is disabled until the sign-in and syncing workflow is integrated. The dashboard's Scan emails button does not start a real Gmail scan.",
+      "Yes, when Gmail setup is available on your device. Go to Settings → Connected inbox, choose Connect Gmail, and complete Google's authorization. The app requests read-only email access. You can disconnect from the same page; disconnecting the app does not itself revoke access in your Google Account settings.",
   },
   {
     id: "settings",
     category: "Settings & Gmail",
     question: "Do Settings options control real scanning and notifications?",
     answer:
-      "The current switches and retention selection are saved as local interface preferences. They do not start background scanning, send alerts, or automatically delete scan history. Export and Delete also need a connected history-storage implementation.",
+      "Interface preferences are stored on this device. Gmail scans run when you request them rather than automatically in the background. If local history storage is available and you enable it, the app can save lab sessions and scan feedback; you can also export or delete those saved records under Settings.",
   },
   {
     id: "api-down",
     category: "Troubleshooting",
     question: "What should I do if I see HTTP 502 or Connection failed?",
     answer:
-      "A 502 or connection error can occur when the frontend cannot get a valid response from FastAPI. Verify that the backend is running on 127.0.0.1:8000, check the backend terminal for errors, then use the red Retry connection button. The frontend's Vite proxy must point /api requests to that backend address.",
+      "First try reconnecting from the notification. If the issue continues, check that PhishLab's local service is running. Developers can find startup commands and diagnostics in the Developer & debugging tab above.",
   },
   {
     id: "nothing-loads",
     category: "Troubleshooting",
     question: "Why are no emails showing?",
     answer:
-      "First check for a connection error and start FastAPI if needed. You can test the endpoint at http://127.0.0.1:8000/api/demo/emails. If the endpoint returns data, refresh the results and clear any active search or filters. If it returns an error, inspect the FastAPI terminal.",
+      "Check your connection status, select the correct source (Gmail inbox or Training demo), and clear search filters. To view real inbox results, your Gmail account must be connected and a scan must have completed. If the app cannot load training examples either, try reconnecting.",
   },
   {
     id: "reload",
     category: "Troubleshooting",
     question: "Does Retry connection scan my Gmail?",
     answer:
-      "No. Retry connection repeats the demo-email request to FastAPI. It only reloads the local demonstration data and does not access a Gmail inbox.",
+      "No. Retry connection only tries to restore communication with the application service. Gmail messages are scanned when you deliberately choose Scan emails while connected.",
+  },
+  {
+    id: "details",
+    category: "Scan results",
+    question: "What should I check in Email Analysis?",
+    answer: "Look at the full sender address, unexpected requests, link information, and any identified warning signs. The model's label is one clue, not proof of authenticity. For uncertain messages, use a trusted way to contact the organization independently.",
+  },
+  {
+    id: "lab-directions",
+    category: "Learning Lab",
+    question: "What do more suspicious, neutral, and less suspicious mean?",
+    answer: "These choices demonstrate how a clue may change a reader's impression and sometimes the detection score. They are learning labels, not new security verdicts. A polished message may still be fraudulent, and a rushed message is not necessarily malicious.",
+  },
+  {
+    id: "lab-ai",
+    category: "Learning Lab",
+    question: "Where does the learning explanation come from?",
+    answer: "Some neutral writing examples and lesson summaries use an optional on-device writing assistant. Other examples use prepared wording. AI-generated explanations may be incomplete; compare them with the original message and verified results rather than relying on them as security advice.",
+  },
+  {
+    id: "lab-preview",
+    category: "Learning Lab",
+    question: "Do the link, attachment, or signature examples change the actual email?",
+    answer: "No. These options only show what a different visible label or filename might look like. PhishLab does not create clickable links, open attachments, edit a stored Gmail message, or pretend that these display edits changed the classifier's text input.",
+  },
+  {
+    id: "history-save",
+    category: "Privacy & history",
+    question: "How do I save and return to a Learning Lab session?",
+    answer: "If local storage is available, enable Save Lab history under Settings → Data and privacy. Your applied examples and results can then be reopened from Lab history. You can remove an individual saved lab there or delete saved data from Settings.",
+  },
+  {
+    id: "privacy",
+    category: "Privacy & history",
+    question: "Are my original emails edited or sent by the Learning Lab?",
+    answer: "No. The Learning Lab compares temporary copies and Gmail access is read-only. Local learning sessions can contain email text if you choose to save them, so check the Data and privacy settings before enabling history on a shared device.",
+  },
+  {
+    id: "gmail-auth",
+    category: "Settings & Gmail",
+    question: "What if Gmail sign-in fails or is cancelled?",
+    answer: "Open Settings → Connected inbox and try connecting again. Confirm you are signed into the intended Google account and complete the authorization window. The training demo remains available without connecting Gmail; advanced setup issues are covered in Developer & debugging.",
+  },
+  {
+    id: "false-positives",
+    category: "Scan results",
+    question: "Can a legitimate email be flagged as a threat?",
+    answer: "Yes. Automated detection can make mistakes in either direction. Look at the message details and independently verify unexpected requests before deciding what to do.",
   },
 ];
 
@@ -186,6 +238,7 @@ const quickLinks: {
 ];
 
 function HelpCenterPage({ onOpenMenu, onNavigate }: HelpCenterProps) {
+  const [tab, setTab] = useState<"guides" | "developer">("guides");
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState<HelpCategory>("All topics");
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -234,10 +287,10 @@ function HelpCenterPage({ onOpenMenu, onNavigate }: HelpCenterProps) {
             </div>
             <h2 className="text-[26px] font-bold tracking-tight md:text-[32px]">How can we help?</h2>
             <p className="mt-2 text-sm leading-6 text-[#d9e2fb]">
-              Learn how to review scan results, use the Learning Lab, and troubleshoot connection issues.
+              Explore guides for spotting suspicious emails, comparing examples, and managing your account.
             </p>
 
-            <label className="relative mt-6 block">
+            {tab === "guides" && <label className="relative mt-6 block">
               <span className="sr-only">Search help articles</span>
               <Search size={18} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[#8a95ac]" />
               <input
@@ -257,10 +310,22 @@ function HelpCenterPage({ onOpenMenu, onNavigate }: HelpCenterProps) {
                   <X size={16} />
                 </button>
               )}
-            </label>
+            </label>}
           </div>
         </section>
 
+        <div role="tablist" aria-label="Help center sections" className="mt-6 flex flex-wrap gap-2 border-b border-[#e1e6ee] pb-3">
+          <button type="button" role="tab" aria-selected={tab === "guides"} onClick={() => setTab("guides")}
+            className={`inline-flex items-center gap-2 rounded-lg px-4 py-2.5 text-xs font-semibold ${tab === "guides" ? "bg-[#eef2ff] text-[#3157d5]" : "text-[#657087] hover:bg-[#f2f4f9]"}`}>
+            <BookOpen size={16} /> Help guides
+          </button>
+          <button type="button" role="tab" aria-selected={tab === "developer"} onClick={() => setTab("developer")}
+            className={`inline-flex items-center gap-2 rounded-lg px-4 py-2.5 text-xs font-semibold ${tab === "developer" ? "bg-[#eef2ff] text-[#3157d5]" : "text-[#657087] hover:bg-[#f2f4f9]"}`}>
+            <TerminalSquare size={16} /> Developer &amp; debugging
+          </button>
+        </div>
+
+        {tab === "guides" ? <div role="tabpanel" className="min-w-0">
         <section aria-labelledby="quick-guides" className="mt-8">
           <div className="mb-4">
             <h3 id="quick-guides" className="text-base font-bold text-[#202a44]">Quick guides</h3>
@@ -292,7 +357,7 @@ function HelpCenterPage({ onOpenMenu, onNavigate }: HelpCenterProps) {
           <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
             <div>
               <h3 id="faq-heading" className="text-base font-bold text-[#202a44]">Frequently asked questions</h3>
-              <p className="mt-1 text-xs text-[#8892a4]">Answers based on PhishLab's current demo features.</p>
+              <p className="mt-1 text-xs text-[#8892a4]">Answers for PhishLab's scanning, learning, and privacy features.</p>
             </div>
             <span className="text-[11px] font-semibold text-[#8790a2]" role="status" aria-live="polite">
               {filteredQuestions.length} {filteredQuestions.length === 1 ? "answer" : "answers"}
@@ -365,32 +430,44 @@ function HelpCenterPage({ onOpenMenu, onNavigate }: HelpCenterProps) {
           </div>
         </section>
 
-        <section aria-labelledby="connection-guide" className="mt-8 rounded-2xl border border-[#e1e6ee] bg-white px-5 py-5 shadow-sm md:px-6">
-          <div className="flex items-start gap-3">
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#fff0ed] text-[#b8493b]">
-              <WifiOff size={19} />
-            </span>
-            <div className="min-w-0 flex-1">
-              <h3 id="connection-guide" className="text-sm font-bold text-[#28334e]">Having trouble connecting to FastAPI?</h3>
-              <p className="mt-1.5 text-xs leading-6 text-[#788398]">
-                Check that the backend is running, then retry the connection from the Dashboard or Scan Results page.
-              </p>
-              <div className="mt-3 overflow-x-auto rounded-lg bg-[#f3f5f9] px-3 py-3 font-mono text-[11px] text-[#44516a]">
-                python -m uvicorn app.main:app --reload --port 8000
-              </div>
-              <p className="mt-2 text-[11px] leading-5 text-[#9098a8]">
-                Run the command inside the backend folder with its Python virtual environment activated. Check /health or /docs at http://127.0.0.1:8000 to confirm the API is available.
-              </p>
-              <button
-                type="button"
-                onClick={() => onNavigate("dashboard")}
-                className="mt-4 inline-flex items-center gap-1.5 text-xs font-semibold text-[#3157d5] hover:underline"
-              >
-                Return to dashboard <ArrowRight size={14} />
-              </button>
+        </div> : <div role="tabpanel" className="mt-8 space-y-6">
+          <section className="rounded-2xl border border-[#e1e6ee] bg-white p-5 shadow-sm md:p-6">
+            <div className="flex items-center gap-2"><Code2 size={19} className="text-[#3157d5]" /><h3 className="text-base font-bold text-[#202a44]">Local development commands</h3></div>
+            <p className="mt-2 text-xs leading-6 text-[#748095]">For developers running the source version. Activate your Python environment and install project dependencies first. Run each section from the indicated folder.</p>
+            <div className="mt-5 grid gap-4 md:grid-cols-2">
+              {[
+                { title: "Start the backend", note: "Run from the backend folder.", command: "python -m uvicorn app.main:app --reload --port 8000" },
+                { title: "Start the interface", note: "Run from the frontend folder.", command: "npm ci\nnpm run dev" },
+                { title: "Set up the local writing assistant", note: "Optional. Run from backend; installs the runtime and Qwen3 4B 4-bit model.", command: "python scripts/setup_local_ai.py" },
+                { title: "Run backend checks", note: "Run from backend; tests do not require a live Gmail inbox.", command: "python -m unittest discover -s tests" },
+                { title: "Run frontend checks", note: "Run from frontend.", command: "npm test\nnpm run build" },
+                { title: "Check API health", note: "With the backend running, open this address in a browser.", command: "http://127.0.0.1:8000/health" },
+              ].map(({ title, note, command }) => (
+                <div key={title} className="min-w-0 rounded-xl border border-[#e3e8f1] bg-[#fbfcff] p-4">
+                  <h4 className="text-xs font-bold text-[#34405c]">{title}</h4>
+                  <p className="mt-1 text-[11px] leading-5 text-[#7b8497]">{note}</p>
+                  <pre className="mt-3 overflow-x-auto whitespace-pre-wrap break-all rounded-lg bg-[#1d2842] p-3 text-[11px] leading-5 text-[#f1f5ff]">{command}</pre>
+                </div>
+              ))}
             </div>
-          </div>
-        </section>
+          </section>
+          <section className="rounded-2xl border border-[#e1e6ee] bg-white p-5 shadow-sm md:p-6">
+            <div className="flex items-center gap-2"><Cpu size={19} className="text-[#3157d5]" /><h3 className="text-base font-bold text-[#202a44]">Model and device diagnostics</h3></div>
+            <p className="mt-2 text-xs leading-6 text-[#748095]">Settings → Debugging shows model availability, CPU/GPU settings, application readiness, and the optional test runner. Use Auto detect for recommended device settings; manual overrides are intended for developers.</p>
+            <div className="mt-4 space-y-2 text-xs leading-6 text-[#657087]">
+              <p><strong>Qwen required:</strong> Forces AI rewrites and learning explanations to use the local model. If the model is unavailable, the comparison reports an error instead of silently substituting prepared text.</p>
+              <p><strong>Standard mode:</strong> Falls back to a prepared, safe learning example when AI writing is unavailable. Detection scores still come from the classifier.</p>
+              <p><strong>Preview-only fields:</strong> Link labels, attachment names, and signatures are not separate classifier inputs; the app shows their effect on presentation only.</p>
+              <p><strong>Privacy:</strong> Never commit OAuth tokens, client secrets, saved email content, or local runtime settings to source control.</p>
+            </div>
+            <button type="button" onClick={() => onNavigate("settings")} className="mt-4 inline-flex items-center gap-2 text-xs font-semibold text-[#3157d5] hover:underline"><Settings2 size={15} /> Open debugging settings</button>
+          </section>
+          <section className="rounded-2xl border border-[#e1e6ee] bg-white p-5 shadow-sm md:p-6">
+            <div className="flex items-center gap-2"><WifiOff size={19} className="text-[#b8493b]" /><h3 className="text-base font-bold text-[#202a44]">Troubleshooting checklist</h3></div>
+            <p className="mt-3 text-xs leading-6 text-[#657087]">If the app cannot connect, verify that the backend is running and check <code>http://127.0.0.1:8000/health</code>. For an unavailable learning assistant, check the GGUF model and runtime status under Debugging. If Gmail fails, verify that a Google Desktop OAuth client is configured before reconnecting.</p>
+            <p className="mt-2 text-xs leading-6 text-[#657087]">The backend also documents available routes at <code>http://127.0.0.1:8000/docs</code>. The Python test runner appears in Settings only when enabled for local development.</p>
+          </section>
+        </div>}
       </div>
     </>
   );

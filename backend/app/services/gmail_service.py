@@ -577,12 +577,78 @@ class _HTMLLinkExtractor(HTMLParser):
         self._label = []
 
 
+_INVISIBLE_CHARS = re.compile("[\u200b\u200c\u2060\ufeff\u00ad\u034f\u180e\u2800\u3164\u115f\u1160\uffa0]")
+# Exotic spaces (figure space, narrow no-break space, ideographic space ...) used as padding.
+_UNICODE_SPACES = re.compile("[\u1680\u2000-\u200a\u202f\u205f\u3000]")
+# text/plain parts from marketing senders often contain Markdown-style links,
+# "[label](https://tracking-url)". Readers (and the classifier) should see the label.
+_MARKDOWN_LINK = re.compile(r"\[((?:[^\[\]\n]|\[[^\[\]\n]*\]){1,300})\]\((https?://[^)\s]+)\)", re.I)
+
+
+_HTML_IN_PLAIN = re.compile(
+    r"</?(?:a|span|strong|b|i|u|em|br|div|p|table|tr|td|th|img|font|center|h[1-6]|ul|ol|li)\b[^>]*>", re.I)
+_WRAPPED_URL = re.compile(r"[<\[](https?://[^\s<>\[\]]+)[>\]]", re.I)
+_LONG_URL = re.compile(r"https?://[^\s<>\"']{81,}", re.I)
+_MAX_INLINE_URL = 80
+_HTML_COMMENT = re.compile(r"<!--.*?-->", re.S)
+_CONDITIONAL_MARKER = re.compile(r"<!\[(?:if|endif)[^>]*>", re.I)
+# Leftovers of broken tags, e.g.  data-block="row_1_image">
+_ATTRIBUTE_RESIDUE = re.compile(r'\b[\w:-]+="[^"\n]{0,200}">?')
+_EMPTY_BRACKETS = re.compile(r"\[\s*\]")
+_SPACED_PAREN_URL = re.compile(r"\(\s+(https?://\S+?)\s+\)")
+
+
+def _shorten_url(match: re.Match) -> str:
+    """Tracking links can be 300+ characters; show scheme://host/ and an ellipsis."""
+    url = match.group()
+    try:
+        parts = urlsplit(url)
+        return f"{parts.scheme}://{parts.netloc}/\u2026" if parts.netloc else url[:_MAX_INLINE_URL] + "\u2026"
+    except ValueError:
+        return url[:_MAX_INLINE_URL] + "\u2026"
+
+
+def _tidy_plain_text(decoded: str) -> str:
+    """Make a text/plain part readable without losing its meaning.
+
+    Link destinations are collected separately from the raw text, so the body
+    can hide tracking noise: Markdown links collapse to their labels, <url> and
+    [url] wrappers are removed, long URLs are abbreviated, and plain-text parts
+    that actually contain HTML markup are converted like HTML.
+    """
+    # HTML comments / Outlook conditional blocks (<!--[if mso]> ... <![endif]-->)
+    decoded = _HTML_COMMENT.sub("", decoded)
+    decoded = _CONDITIONAL_MARKER.sub("", decoded)
+    if len(_HTML_IN_PLAIN.findall(decoded)) >= 2:
+        decoded = _html_to_text(decoded) or decoded
+    decoded = _MARKDOWN_LINK.sub(r"\1", decoded)
+    decoded = _WRAPPED_URL.sub(r"\1", decoded)
+    decoded = _LONG_URL.sub(_shorten_url, decoded)
+    decoded = _ATTRIBUTE_RESIDUE.sub("", decoded)
+    decoded = _EMPTY_BRACKETS.sub("", decoded)
+    return _SPACED_PAREN_URL.sub(r"(\1)", decoded)
+
+
 def _clean_visible_text(value: str) -> str:
     """Normalize entities and whitespace without hiding the original message content."""
     value = unescape(value).replace("\xa0", " ").replace("\r\n", "\n")
-    value = value.replace("\u200b", "").replace("\u200c", "").replace("\ufeff", "")
+    # Zero-width / invisible padding used for email preheaders (ZWSP, ZWNJ,
+    # word joiner, BOM, soft hyphen, combining grapheme joiner, Mongolian vowel sep.).
+    value = _UNICODE_SPACES.sub(" ", _INVISIBLE_CHARS.sub("", value))
     lines = [re.sub(r"[\t ]+", " ", line).strip() for line in value.splitlines()]
-    return re.sub(r"\n{3,}", "\n\n", "\n".join(lines)).strip()
+    # Spacer cells in HTML emails often leave lines holding only "." or "|" etc.
+    lines = [line for line in lines if not (line and len(line) <= 3 and not any(c.isalnum() for c in line))]
+    text = re.sub(r"\n{3,}", "\n\n", "\n".join(lines)).strip()
+    # Product grids / buttons produce one short fragment per paragraph; keep
+    # paragraph breaks only around longer prose.
+    blocks = text.split("\n\n")
+    merged = [blocks[0]] if blocks and blocks[0] else []
+    for block in blocks[1:]:
+        if merged and max(len(merged[-1].rsplit("\n", 1)[-1]), len(block.split("\n", 1)[0])) <= 60:
+            merged[-1] += "\n" + block
+        else:
+            merged.append(block)
+    return "\n\n".join(merged)
 
 
 def _is_http_link(value: str) -> bool:
@@ -762,7 +828,7 @@ def _text_sections(part: dict) -> list[str]:
         return []
     decoded = decode_body(body.get("data"), _get_charset(part))
     if mime == "text/plain":
-        cleaned = _clean_visible_text(decoded)
+        cleaned = _clean_visible_text(_tidy_plain_text(decoded))
     elif mime == "text/html":
         cleaned = _html_to_text(decoded)
     else:
@@ -841,8 +907,22 @@ def _extract_links(payload: dict, body: str) -> list[dict[str, str]]:
         for link in extractor.links:
             add(link["url"], link["display_text"])
 
+    # Plain-text parts: the body shown to the classifier has Markdown link URLs
+    # collapsed to their labels, so read the destinations from the raw text.
+    for part in _iter_message_parts(payload):
+        if _is_attachment_part(part) or _string_or_empty(part.get("mimeType")).casefold() != "text/plain":
+            continue
+        raw = decode_body((part.get("body") or {}).get("data"), _get_charset(part))
+        for match in _MARKDOWN_LINK.finditer(raw):
+            add(match.group(2), match.group(1))
+        for match in _URL_PATTERN.finditer(_MARKDOWN_LINK.sub(" ", raw)):
+            url = match.group().rstrip(".,;:!?)]}>")
+            add(url, url)
+
     for match in _URL_PATTERN.finditer(body):
         url = match.group().rstrip(".,;:!?)]}")
+        if url.endswith("\u2026"):  # abbreviated tracking URL; full one was read above
+            continue
         add(url, url)
     return links
 

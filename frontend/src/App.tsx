@@ -35,6 +35,7 @@ import {
   type EmailMode,
 } from "./data/emailPresentation";
 import { withHeaderCrossfade } from "./data/headerCrossfade";
+import { greetingName } from "./data/accountGreeting";
 import "./animations.css";
 
 type BackendRetry = "startup" | "demo" | "gmail-status" | "scan" | "connect" | "disconnect";
@@ -520,7 +521,7 @@ function App() {
                 <div className="mb-7 flex flex-wrap items-end justify-between gap-4">
                   <div>
                     <h2 className="text-[26px] font-bold tracking-tight text-[#17213c]">
-                      {greetingForTime(new Date(now))} {gmailStatus?.connected ? (gmailStatus.display_name || gmailStatus.email?.split("@")[0]) : "there"},
+                      {greetingForTime(new Date(now))} {gmailStatus?.connected ? greetingName(gmailStatus.display_name, gmailStatus.email) : "there"},
                     </h2>
 
                     <p className="mt-1 text-sm text-[#747e93]">

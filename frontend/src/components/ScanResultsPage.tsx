@@ -259,8 +259,8 @@ function ScanResultsPage({
             <h3 className="text-base font-bold text-[#202a44]">Email classifications</h3>
             <p className="mt-1 text-xs text-[#8a92a4]">
               {emailMode === "gmail"
-                ? "Current results are recent Gmail messages classified by the local model."
-                : "Current results are synthetic training messages from FastAPI's demo endpoint."}
+                ? "Results from your most recent Gmail scan."
+                : "You're viewing sample training messages, not emails from your inbox."}
             </p>
           </div>
           <span className="rounded-full bg-[#eef2ff] px-3 py-1.5 text-[11px] font-semibold text-[#3157d5]">
@@ -419,11 +419,11 @@ function ScanResultsPage({
                     </p>
                     <p className="mt-1 text-xs text-[#9198a8]">
                       {loading
-                        ? emailMode === "gmail" ? "Scanning recent Gmail messages." : "Fetching training examples from FastAPI."
+                        ? emailMode === "gmail" ? "Scanning recent Gmail messages." : "Loading training examples."
                         : error
                           ? emailMode === "gmail"
                             ? "Check the connection popup, or reconnect Gmail in Settings and retry."
-                            : "Check that FastAPI is running and retry the request."
+                            : "Check your connection and try again."
                           : emailMode === "gmail" && !hasLoaded
                             ? "Select Scan emails in the top bar to retrieve recent inbox messages."
                             : emailMode === "gmail" && emails.length === 0

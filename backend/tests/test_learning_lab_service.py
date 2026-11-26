@@ -46,24 +46,22 @@ def classifier_side_effect(subject, body):
 class LearningLabServiceTests(unittest.TestCase):
     def test_registry_exactly_matches_frontend_transformation_contract(self):
         expected = {
-            "sender-label": "sender_name",
-            "sender-domain": "sender_address",
-            "subject-format": "subject",
-            "subject-wording": "subject",
-            "greeting-generic": "greeting",
-            "body-rephrase": "body",
-            "request-rephrase": "request",
-            "link-placeholder": "link_text",
-            "attachment-label": "attachment",
-            "signature-fictional": "signature",
-            "layout-spacing": "formatting",
-            "layout-compact": "formatting",
+            "sender_name": ["sender-unverified", "sender-label", "sender-friendly"],
+            "sender_address": ["sender-unusual-domain", "sender-domain", "sender-support-domain"],
+            "subject": ["subject-urgent", "subject-wording", "subject-informative"],
+            "greeting": ["greeting-impersonal", "greeting-generic", "greeting-friendly"],
+            "body": ["body-pressure", "body-rephrase", "body-reassuring"],
+            "request": ["request-pressure", "request-rephrase", "request-independent"],
+            "link_text": ["link-pressure", "link-placeholder", "link-independent"],
+            "attachment": ["attachment-urgent", "attachment-label", "attachment-descriptive"],
+            "signature": ["signature-pressure", "signature-fictional", "signature-friendly"],
+            "formatting": ["layout-compact", "layout-normal", "layout-spacing"],
         }
-
-        self.assertEqual(
-            {key: definition.part for key, definition in TRANSFORMATIONS.items()},
-            expected,
-        )
+        for part, ids in expected.items():
+            with self.subTest(part=part):
+                self.assertEqual([TRANSFORMATIONS[change_id].part for change_id in ids], [part] * 3)
+        # Retain the older capitalization ID for existing sessions/API callers.
+        self.assertEqual(TRANSFORMATIONS["subject-format"].part, "subject")
 
     def run_experiment(self, transformations, message=None):
         source = message or gmail_message()
@@ -163,6 +161,29 @@ class LearningLabServiceTests(unittest.TestCase):
         self.assertEqual(result.score_change, 0.0)
         self.assertFalse(result.decision_changed)
         self.assertFalse(result.applied_transformations[0].affects_classifier)
+
+    def test_preview_only_components_are_now_available_without_changing_classifier_input(self):
+        for part, change_id, sample in [
+            ("link_text", "link-pressure", "Act now"),
+            ("attachment", "attachment-descriptive", "account-information"),
+            ("signature", "signature-friendly", "Example Customer Care"),
+        ]:
+            with self.subTest(part=part):
+                result, classify = self.run_experiment([request(part, change_id)])
+                self.assertTrue(result.applied_transformations[0].applied)
+                self.assertFalse(result.applied_transformations[0].affects_classifier)
+                self.assertEqual(classify.call_args_list[0], classify.call_args_list[1])
+                self.assertIn(sample, result.modified_values[part])
+                self.assertEqual(result.score_change, 0.0)
+
+    def test_more_and_less_suspicious_text_examples_are_rescored(self):
+        for part, change_id in [("subject", "subject-urgent"), ("body", "body-reassuring")]:
+            with self.subTest(change=change_id):
+                result, classify = self.run_experiment([request(part, change_id)])
+                self.assertTrue(result.applied_transformations[0].applied)
+                self.assertTrue(result.applied_transformations[0].affects_classifier)
+                self.assertEqual(classify.call_count, 2)
+                self.assertNotEqual(classify.call_args_list[0], classify.call_args_list[1])
 
     def test_formatting_only_transformation_has_no_model_impact(self):
         result, classify = self.run_experiment(

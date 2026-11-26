@@ -4,12 +4,13 @@ import { getLabOptions, buildWhatIfRequest } from "./labTransformations.ts";
 
 const email = { id: "demo-001", subject: "URGENT: Verify now", body: "Please reply now." };
 
-test("neutral subject and body transformations advertise optional local Qwen", () => {
+test("neutral subject, body and request options keep the existing rewrite IDs", () => {
   for (const part of ["subject", "body", "request"]) {
     const options = getLabOptions(part, email);
     const rewrite = options.find((option) => ["subject-wording", "body-rephrase", "request-rephrase"].includes(option.id));
     assert.ok(rewrite, `${part} rewrite option must exist`);
-    assert.match(rewrite.description, /local Qwen/i);
+    assert.equal(rewrite.direction, "Neutral");
+    assert.doesNotMatch(rewrite.description, /Qwen|fallback|backend/i);
     assert.equal(rewrite.scope, "Message text");
   }
 });

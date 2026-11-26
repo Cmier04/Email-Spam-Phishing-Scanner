@@ -160,7 +160,7 @@ def _generate_with_model(llm: Any, facts: Mapping[str, Any]) -> str:
         # Repeated identical rewrites should be reproducible for comparisons.
         temperature=0.0 if rewriting else 0.2,
         top_p=0.9,
-        max_tokens=({"subject": 90, "request": 130, "body": 220}.get(facts.get("rewrite_kind"), 160) if rewriting else 170),
+        max_tokens=({"subject": 120, "request": 180, "body": 320}.get(facts.get("rewrite_kind"), 160) if rewriting else 170),
     )
     return response["choices"][0]["message"]["content"]
 
@@ -329,8 +329,8 @@ def reset_local_ai_worker() -> None:
 # model claims into a security-oriented explanation. This is a best-effort
 # guard; it cannot prove that an LLM sentence is factually correct.
 _DISALLOWED = re.compile(
-    r"\d|https?://|www\.|[<>`{}]|\b(?:model|classifier|score|probability|"
-    r"prediction|definitely|guaranteed|certainly|proven|caused|triggered|"
+    r"\d+\s*%|https?://|www\.|[<>`{}]|\b(?:percent|"
+    r"definitely|guaranteed|certainly|proven|"
     r"always safe|perfectly safe|ignore instructions|system prompt|token\.json)\b",
     re.IGNORECASE,
 )
@@ -348,9 +348,11 @@ def _validate_generated_text(text: Any) -> tuple[str, str]:
         value = result[field]
         if not isinstance(value, str):
             raise LocalAIInvalid("AI returned a non-text explanation")
-        value = value.strip()
-        if not 25 <= len(value) <= 340 or "\n" in value or _DISALLOWED.search(value):
-            raise LocalAIInvalid("AI explanation failed safety/length checks")
+        value = " ".join(value.split())
+        if not 20 <= len(value) <= 450:
+            raise LocalAIInvalid(f"AI {field} length {len(value)} outside 20-450")
+        if _DISALLOWED.search(value):
+            raise LocalAIInvalid(f"AI {field} contained disallowed content")
         pieces.append(value)
     if pieces[0] == pieces[1]:
         raise LocalAIInvalid("AI produced duplicate explanations")
@@ -374,7 +376,8 @@ def enrich_learning_summary(dynamic: LearningSummary) -> LearningSummary:
         return dynamic.model_copy(update={"fallback_reason": "local_model_unavailable"})
     except LocalAIFailed:
         return dynamic.model_copy(update={"fallback_reason": "generation_failed"})
-    except (LocalAIInvalid, RuntimeError, ValueError, TypeError):
+    except (LocalAIInvalid, RuntimeError, ValueError, TypeError) as exc:
+        _LOGGER.warning("Local AI summary rejected: %s", exc)
         return dynamic.model_copy(update={"fallback_reason": "invalid_ai_response"})
 
     # App-authored numerical facts and source labels remain authoritative.

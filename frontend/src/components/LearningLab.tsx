@@ -34,6 +34,7 @@ import {
 import {
   buildWhatIfRequest,
   getLabOptions,
+  getSavedLabOption,
   getOriginalPartValue,
   toApiPart,
   type EmailPart,
@@ -254,7 +255,7 @@ function LearningLab({
     const saved: Partial<Record<EmailPart, LabChange>> = {};
     for (const item of initialSession?.changes || []) {
       const part = item.part as EmailPart;
-      const matched = getLabOptions(part, email).find(option => option.id === item.id);
+      const matched = getSavedLabOption(part, item.id, email);
       if (matched) saved[part] = matched;
     }
     return saved;
@@ -828,7 +829,7 @@ function LearningLab({
                 Explore this email's components
               </h1>
               <p className="mt-2 text-sm text-[#788197]">
-                Inspect the email, try controlled changes, and compare the classifier's response.
+                Explore the email, try controlled examples, and see how the detection results change.
               </p>
             </div>
             {appliedChanges.length > 0 && (

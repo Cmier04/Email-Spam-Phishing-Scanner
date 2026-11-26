@@ -77,10 +77,6 @@ function ComparisonCard({
   );
 }
 
-// These transformations are registered by FastAPI but currently return
-// an "unavailable" result because their metadata is not parsed separately.
-const unavailableIds = new Set(["link-placeholder", "attachment-label", "signature-fictional"]);
-
 function signedPoints(value: number) {
   if (value > 0) return `+${value.toFixed(2)}`;
   if (value < 0) return `−${Math.abs(value).toFixed(2)}`;
@@ -181,14 +177,19 @@ function WhatIfPanel({
 
       <div className="space-y-3 p-5">
         <p className="text-xs leading-5 text-[#7b8497]">
-          Try a change on a temporary copy. Neutral rewrites use local Qwen when available. You can require Qwen for AI rewrites under Settings → Debugging.
+          Explore how urgency, wording, and presentation can change the impression of an email. Choose a more suspicious, neutral, or less suspicious example. Your original message stays untouched.
         </p>
+        {selected && !options.some((option) => option.id === selected.id) && (
+          <p className="rounded-lg bg-[#f5f7fd] p-3 text-[11px] text-[#657087]">
+            Previously saved example: {selected.title}. Select a new option to replace it, or undo it below.
+          </p>
+        )}
         <CrossfadeContent changeKey={title} contentClassName="space-y-3">
         {options.map((option) => (
           <button
             key={option.id}
             type="button"
-            disabled={loading || unavailableIds.has(option.id)}
+            disabled={loading}
             onClick={() => {
               if (selected?.id === option.id) {
                 onReset();
@@ -205,17 +206,17 @@ function WhatIfPanel({
           >
             <span className="flex items-start justify-between gap-3">
               <span className="text-xs font-semibold text-[#35415c]">{option.title}</span>
-              {unavailableIds.has(option.id) && (
-                <span className="rounded-full bg-[#f0f2f6] px-2 py-1 text-[9px] font-semibold text-[#788197]">Coming later</span>
+              {option.scope === "Metadata only" && ["link", "attachment", "signature"].includes(option.part) && (
+                <span className="rounded-full bg-[#f0f2f6] px-2 py-1 text-[9px] font-semibold text-[#788197]">Preview only</span>
               )}
               {selected?.id === option.id && (
                 <span className="phishlab-whatif-applied rounded-full bg-[#e9f7f0] px-2 py-1 text-[9px] font-bold text-[#277c58]">Applied</span>
               )}
             </span>
-            <span className="mt-2 block text-[11px] leading-5 text-[#7b8497]">{option.description}{unavailableIds.has(option.id) ? " This component is not separately available in the current backend." : ""}</span>
+            <span className="mt-2 block text-[11px] leading-5 text-[#7b8497]">{option.description}</span>
             <span className="mt-3 flex flex-wrap gap-2">
-              <span className="rounded-md bg-[#f0f2f6] px-2 py-1 text-[9px] text-[#657087]">{option.kind}</span>
-              <span className="rounded-md bg-[#eef2ff] px-2 py-1 text-[9px] text-[#3157d5]">{option.scope}</span>
+              <span className="rounded-md bg-[#eef2ff] px-2 py-1 text-[9px] font-semibold text-[#3157d5]">{option.direction}</span>
+              <span className="rounded-md bg-[#f0f2f6] px-2 py-1 text-[9px] text-[#657087]">{option.scope}</span>
             </span>
           </button>
         ))}
@@ -234,14 +235,8 @@ function WhatIfPanel({
         <p className="mt-1 text-[10px] text-[#8a92a4]">
           Select a card, then click it again to expand or collapse long text.
         </p>
-        {selectedResult?.applied && (
-          <p className="mt-2 text-[10px] font-semibold text-[#657087]" aria-live="polite">
-            Rewrite method: {selectedResult.generation_method === "local_ai"
-              ? "Local Qwen (educational example)"
-              : selectedResult.generation_method === "fallback"
-                ? "Fixed safe fallback"
-                : "Rule-based transformation"}
-          </p>
+        {selectedResult?.applied && selectedResult.generation_method === "local_ai" && (
+          <p className="mt-2 text-[10px] font-medium text-[#657087]">This example was rewritten with the writing assistant.</p>
         )}
         <CrossfadeContent
           changeKey={comparisonKey}
@@ -271,13 +266,13 @@ function WhatIfPanel({
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h3 className="text-xs font-bold text-[#35415c]">Detection comparison</h3>
             <span className="rounded-full bg-[#e9f7f0] px-2 py-1 text-[9px] font-bold uppercase text-[#277c58]">
-              Real classifier
+              Before &amp; after
             </span>
           </div>
 
           {error && <p className="mt-4 rounded-lg bg-[#fff1f1] p-3 text-xs text-[#a33a3a]" role="alert">{error}</p>}
           {!loading && !experiment && !error && (
-            <p className="mt-4 text-xs leading-5 text-[#7b8497]">Choose a transformation to run a real before-and-after prediction.</p>
+            <p className="mt-4 text-xs leading-5 text-[#7b8497]">Choose a change to compare the original message with your learning example.</p>
           )}
           {experiment && (
             <>
@@ -297,7 +292,7 @@ function WhatIfPanel({
             <div className="mt-3" role="status">
               <p className="flex items-center gap-2 text-[10px] leading-5 text-[#657087]">
                 <LoaderCircle size={14} className="animate-spin motion-reduce:animate-none" />
-                Preparing the rewrite and running the trained classifier...
+                Preparing your example and comparing the results...
               </p>
               {/* Indeterminate activity, not a simulated probability. */}
               <div aria-hidden="true" className="mt-2 h-1 overflow-hidden rounded-full bg-[#e5e9f1]">
@@ -310,29 +305,15 @@ function WhatIfPanel({
             </p>
           ) : null}
           </CrossfadeContent>
-          {experiment && experiment.warnings.length > 0 && (
-            <ul className="mt-3 list-disc space-y-1 rounded-lg bg-[#fff8e8] p-3 pl-7 text-[10px] leading-5 text-[#805b16]">
-              {experiment.warnings.map((warning) => <li key={warning}>{warning}</li>)}
-            </ul>
+          {experiment && experiment.applied_transformations.some((change) => change.applied && !change.affects_classifier) && (
+            <p className="mt-3 text-[10px] leading-5 text-[#68758b]">
+              Display-only changes help you spot visual cues, but they are not part of the text-based detection score.
+            </p>
           )}
-          {experiment && (
-            <details className="mt-3 border-t border-[#e8ebf1] pt-3 text-[10px] leading-5 text-[#657087]">
-              <summary className="cursor-pointer font-semibold text-[#35415c]">Generation details</summary>
-              <div className="mt-2 space-y-1">
-                <p>Mode used: {experiment.ai_mode === "require_qwen" ? "Qwen required" : "automatic"}</p>
-                {experiment.applied_transformations.map((change) => (
-                  <p key={change.transformation_id} className="break-words">
-                    {change.transformation_id}: {change.generation_method === "local_ai" ? "Qwen" : change.generation_method === "fallback" ? `fallback (${change.fallback_reason ?? "unknown"})` : "rule"}
-                    {change.ai_duration_ms != null ? ` · ${change.ai_duration_ms.toFixed(0)} ms` : ""}
-                  </p>
-                ))}
-                {experiment.learning_summary && (
-                  <p>Explanation: {experiment.learning_summary.source === "local_ai" ? "Qwen" : `dynamic fallback (${experiment.learning_summary.fallback_reason ?? "unknown"})`}
-                    {experiment.learning_summary.ai_duration_ms != null ? ` · ${experiment.learning_summary.ai_duration_ms.toFixed(0)} ms` : ""}
-                  </p>
-                )}
-              </div>
-            </details>
+          {experiment && experiment.applied_transformations.some((change) => change.generation_method === "fallback") && (
+            <p className="mt-2 text-[10px] leading-5 text-[#68758b]">
+              A standard example was used because the writing assistant was unavailable.
+            </p>
           )}
         </div>
       </div>

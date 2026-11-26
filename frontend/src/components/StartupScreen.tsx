@@ -9,7 +9,7 @@ type StartupScreenProps = {
 /** A short branded introduction while the real backend requests settle. */
 export default function StartupScreen({ demoChecked, gmailChecked }: StartupScreenProps) {
   const detail = !demoChecked
-    ? "Checking local FastAPI services..."
+    ? "Preparing your email scanner..."
     : !gmailChecked
       ? "Checking Gmail connection..."
       : "Opening your workspace...";

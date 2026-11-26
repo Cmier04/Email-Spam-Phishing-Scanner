@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Activity, BrainCircuit, Cpu, Gauge, MonitorCog, TerminalSquare } from "lucide-react";
 import {
   getAISettings,
   getLocalAIStatus,
@@ -157,13 +158,13 @@ export default function DebuggingSettings() {
   return (
     <section className="overflow-hidden rounded-2xl border border-[#e1e6ee] bg-white shadow-sm" aria-label="Debugging settings">
       <div className="border-b border-[#e8ebf1] px-5 py-4 md:px-6">
-        <h2 className="text-sm font-bold text-[#202a44]">Debugging</h2>
+        <h2 className="flex items-center gap-2 text-sm font-bold text-[#202a44]"><MonitorCog size={17} className="text-[#3157d5]" /> Debugging</h2>
         <p className="mt-1 text-xs text-[#8a92a4]">Local AI device settings and development diagnostics.</p>
       </div>
       <div className="space-y-5 px-5 py-5 md:px-6">
         <div className="space-y-2 rounded-xl border border-[#dce3f5] bg-[#f8faff] p-4" aria-label="Application readiness">
           <div className="flex items-center justify-between gap-2">
-            <h3 className="text-xs font-bold text-[#202a44]">Application readiness</h3>
+            <h3 className="flex items-center gap-2 text-xs font-bold text-[#202a44]"><Activity size={15} className="text-[#3157d5]" /> Application readiness</h3>
             <button type="button" onClick={() => setRefreshStatus((n) => n + 1)} className="text-xs font-semibold text-[#3157d5]">Refresh</button>
           </div>
           {readinessError && <p role="status" className="text-xs text-[#a33a3a]">{readinessError}</p>}
@@ -177,7 +178,7 @@ export default function DebuggingSettings() {
           </div>}
         </div>
         <div className="space-y-3 rounded-xl border border-[#dce3f5] bg-[#f8faff] p-4">
-          <h3 className="text-xs font-bold text-[#202a44]">Learning Lab AI behavior</h3>
+          <h3 className="flex items-center gap-2 text-xs font-bold text-[#202a44]"><BrainCircuit size={15} className="text-[#6c56bd]" /> Learning Lab AI behavior</h3>
           <label className="flex cursor-pointer items-start gap-3">
             <input type="checkbox" checked={forceQwen}
               onChange={(event) => saveForceQwenPreference(event.target.checked)}
@@ -193,7 +194,7 @@ export default function DebuggingSettings() {
         </div>
         <div className="space-y-2 text-[11px] leading-5 text-[#657087]">
           <div className="flex items-center justify-between gap-2">
-            <h3 className="text-xs font-bold text-[#202a44]">Local Qwen configuration</h3>
+            <h3 className="flex items-center gap-2 text-xs font-bold text-[#202a44]"><Cpu size={15} className="text-[#3157d5]" /> Local Qwen configuration</h3>
             <button type="button" onClick={() => setRefreshStatus((n) => n + 1)} className="font-semibold text-[#3157d5]">Refresh</button>
           </div>
           {aiStatusError && <p role="status" className="text-[#a33a3a]">{aiStatusError}</p>}
@@ -215,7 +216,6 @@ export default function DebuggingSettings() {
               <p><strong>Detected device:</strong> {settings.detected.device}</p>
               <p><strong>Recommended profile:</strong> {settings.detected.profile} ({settings.detected.install_backend})</p>
               <p className="text-[#68758b]">{settings.detected.note}</p>
-              <p>{settings.detected.note}</p>
               <p><strong>Device-detected defaults:</strong> Qwen {settings.detected_defaults.enabled ? "on" : "off"}, GPU layers {settings.detected_defaults.gpu_layers}, threads {settings.detected_defaults.threads}, context {settings.detected_defaults.context_size}, batch {settings.detected_defaults.batch_size}, timeout {settings.detected_defaults.generation_timeout_seconds}s.</p>
               <p><strong>Current mode:</strong> {settings.mode === "auto" ? "Automatic (device-detected)" : "Manual override"}</p>
               {settings.environment_overrides.length > 0 && (
@@ -223,7 +223,7 @@ export default function DebuggingSettings() {
               )}
             </div>
             <fieldset className="flex flex-wrap gap-4 text-xs text-[#35405a]">
-              <legend className="mb-2 font-semibold">AI configuration</legend>
+              <legend className="mb-2 flex items-center gap-2 font-semibold"><Gauge size={15} /> AI configuration</legend>
               <label className="flex items-center gap-2">
                 <input type="radio" name="ai-settings-mode" checked={settings.mode === "auto"} disabled={saving}
                   onChange={() => void updateMode("auto")} /> Auto detect
@@ -261,7 +261,7 @@ export default function DebuggingSettings() {
         {message && <p role="status" className="text-xs text-[#a34337]">{message}</p>}
         {testEnabled && (
           <div className="space-y-3 border-t border-[#e8ebf1] pt-4">
-            <h3 className="text-xs font-bold text-[#202a44]">Python test runner (local development only)</h3>
+            <h3 className="flex items-center gap-2 text-xs font-bold text-[#202a44]"><TerminalSquare size={15} className="text-[#3157d5]" /> Python test runner (local development only)</h3>
             <p className="text-[11px] text-[#8a92a4]">Only discovered project tests are allowed. Runs use the existing unittest setup and time out after 90 seconds.</p>
             <label className="block text-xs text-[#35405a]">
               Available test files and functions

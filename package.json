@@ -2,7 +2,7 @@
   "name": "phislab-desktop",
   "version": "0.1.0",
   "private": true,
-  "description": "Local desktop shell for PhisLab phishing education",
+  "description": "Local desktop shell for PhishLab phishing education",
   "main": "desktop/main.cjs",
   "scripts": {
     "desktop:dev": "node desktop/scripts/run-dev.mjs",
@@ -22,7 +22,7 @@
   },
   "build": {
     "appId": "edu.phislab.desktop",
-    "productName": "PhisLab",
+    "productName": "PhishLab",
     "asar": true,
     "directories": {"output": "release"},
     "files": [

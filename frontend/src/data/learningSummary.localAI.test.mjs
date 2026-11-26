@@ -24,7 +24,7 @@ test("identifies locally generated AI guidance without modifying score", () => {
       what_you_should_learn: "Check requests through a trusted source.",
     },
   });
-  assert.match(summary.note, /Offline AI/);
+  assert.match(summary.note, /AI-generated learning guidance/);
   assert.equal(summary.originalProbability, "90.00%");
   assert.equal(summary.modifiedProbability, "80.00%");
   assert.match(summary.whyItMattered, /Comparing the message/);
@@ -40,6 +40,6 @@ test("shows fallback explanation when AI model is unavailable", () => {
       what_you_should_learn: "Verify unexpected requests independently.",
     },
   });
-  assert.match(summary.note, /fallback used/);
+  assert.match(summary.note, /Learning guidance based on your comparison/);
   assert.equal(summary.whyItMattered, "Measured values are accurate.");
 });

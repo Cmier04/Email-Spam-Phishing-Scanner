@@ -13,7 +13,7 @@ const preference = readFileSync(new URL('./forceQwenPreference.ts', import.meta.
   assert.doesNotMatch(panel, /Force Qwen \(no fixed-text fallback\)/);
   assert.doesNotMatch(panel, /<h3[^>]*>Debugging<\/h3>/);
   assert.doesNotMatch(panel, /getLocalAIStatus/);
-  assert.match(panel, /Generation details/);
+  assert.doesNotMatch(panel, /Generation details|Mode used:|ai_duration_ms/);
 });
 
 test('Settings preference persists and Learning Lab invalidates old comparisons when changed', () => {

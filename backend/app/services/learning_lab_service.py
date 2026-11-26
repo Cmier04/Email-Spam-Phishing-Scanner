@@ -54,6 +54,22 @@ class TransformationApplication:
     ai_duration_ms: float | None = None
 
 
+def _set_subject(value: str) -> Callable[[dict], TransformationApplication]:
+    def apply(email: dict) -> TransformationApplication:
+        email["subject"] = value
+        return TransformationApplication(True, "The subject was updated on the temporary copy.", value)
+
+    return apply
+
+
+def _set_body(value: str) -> Callable[[dict], TransformationApplication]:
+    def apply(email: dict) -> TransformationApplication:
+        email["body"] = value
+        return TransformationApplication(True, "The message was updated on the temporary copy.", value)
+
+    return apply
+
+
 def _subject_format(email: dict) -> TransformationApplication:
     email["subject"] = email["subject"].lower()
     return TransformationApplication(
@@ -65,7 +81,7 @@ def _subject_wording(email: dict) -> TransformationApplication:
     email["subject"] = "A note about your account"
     return TransformationApplication(
         True,
-        "Subject wording was replaced with the predefined neutral text.",
+        "The subject was rewritten as a neutral example.",
         email["subject"],
     )
 
@@ -77,12 +93,18 @@ def _body_rephrase(email: dict) -> TransformationApplication:
     )
     return TransformationApplication(
         True,
-        "The complete message body was replaced with predefined text.",
+        "The message was rewritten as a neutral example.",
         email["body"],
     )
 
 
-def _replace_greeting(email: dict) -> TransformationApplication:
+def _greeting_with(greeting: str) -> Callable[[dict], TransformationApplication]:
+    def apply(email: dict) -> TransformationApplication:
+        return _replace_greeting(email, greeting)
+    return apply
+
+
+def _replace_greeting(email: dict, greeting: str = "Hello,") -> TransformationApplication:
     body = email["body"]
     match = re.match(
         r"^(\s*)(dear|hello|hi|good morning|good afternoon|good evening)"
@@ -95,9 +117,9 @@ def _replace_greeting(email: dict) -> TransformationApplication:
             False,
             "No clearly identifiable greeting was found at the start of the body.",
         )
-    email["body"] = f"{match.group(1)}Hello," + body[match.end():]
+    email["body"] = f"{match.group(1)}{greeting}" + body[match.end():]
     return TransformationApplication(
-        True, "The greeting at the start of the body was replaced.", "Hello,"
+        True, "The greeting at the start of the body was replaced.", greeting
     )
 
 
@@ -115,7 +137,13 @@ def _find_requested_sentence(body: str) -> re.Match | None:
     return matches[0] if len(matches) == 1 else None
 
 
-def _replace_request(email: dict) -> TransformationApplication:
+def _request_with(text: str) -> Callable[[dict], TransformationApplication]:
+    def apply(email: dict) -> TransformationApplication:
+        return _replace_request(email, text)
+    return apply
+
+
+def _replace_request(email: dict, replacement_text: str | None = None) -> TransformationApplication:
     body = email["body"]
     sentence = _find_requested_sentence(body)
     if sentence is None:
@@ -123,9 +151,8 @@ def _replace_request(email: dict) -> TransformationApplication:
             False,
             "A single unambiguous requested-action sentence could not be identified.",
         )
-    replacement = (
-        " If this activity was unexpected, review your account using the official "
-        "service."
+    replacement = replacement_text or (
+        "If this activity was unexpected, review your account using the official service."
     )
     email["body"] = (
         body[:sentence.start()] + replacement.lstrip() + body[sentence.end():]
@@ -177,13 +204,13 @@ def _apply_local_rewrite(
     if transformation_id == "subject-wording":
         modified["subject"] = ai.text
         return TransformationApplication(
-            True, "Qwen generated an email-specific, neutral subject example.",
+            True, "The subject was rewritten as a calmer example.",
             ai.text, generation_method="local_ai", ai_duration_ms=ai.ai_duration_ms,
         )
     if transformation_id == "body-rephrase":
         modified["body"] = ai.text
         return TransformationApplication(
-            True, "Qwen generated a neutral educational rewrite of the email body.",
+            True, "The message was rewritten as a calmer example.",
             ai.text, generation_method="local_ai", ai_duration_ms=ai.ai_duration_ms,
         )
     # Preserve all other sentences when editing the identified action request.
@@ -195,28 +222,39 @@ def _apply_local_rewrite(
         + body[requested_sentence.end():]
     )
     return TransformationApplication(
-        True, "Qwen rewrote one requested-action sentence for independent verification.",
+        True, "The requested action was rewritten with independent-verification advice.",
         ai.text, generation_method="local_ai", ai_duration_ms=ai.ai_duration_ms,
     )
 
 
-def _sender_label(email: dict) -> TransformationApplication:
+def _label_with(label: str) -> Callable[[dict], TransformationApplication]:
+    def apply(email: dict) -> TransformationApplication:
+        return _sender_label(email, label)
+    return apply
+
+
+def _sender_label(email: dict, label: str = "Example Account Services") -> TransformationApplication:
     _, address = parseaddr(email.get("sender", ""))
     email["sender"] = (
-        f"Example Account Services <{address}>"
+        f"{label} <{address}>"
         if address
-        else "Example Account Services"
+        else label
     )
     return TransformationApplication(
         True,
         "The sender display label was changed only on the isolated copy.",
-        "Example Account Services",
+        label,
     )
 
 
-def _sender_domain(email: dict) -> TransformationApplication:
+def _domain_with(address: str) -> Callable[[dict], TransformationApplication]:
+    def apply(email: dict) -> TransformationApplication:
+        return _sender_domain(email, address)
+    return apply
+
+
+def _sender_domain(email: dict, address: str = "notice@account-services.example") -> TransformationApplication:
     name, _ = parseaddr(email.get("sender", ""))
-    address = "notice@account-services.example"
     email["sender"] = f"{name} <{address}>" if name else address
     return TransformationApplication(
         True,
@@ -225,12 +263,17 @@ def _sender_domain(email: dict) -> TransformationApplication:
     )
 
 
-def _unavailable(component: str) -> Callable[[dict], TransformationApplication]:
+def _preview_only(component: str, value: str) -> Callable[[dict], TransformationApplication]:
+    """Show inert metadata examples; Gmail content is never modified or sent.
+
+    The parser does not expose these as independently writable fields. The
+    frontend can still compare display examples without inventing a scored edit.
+    """
     def apply(_email: dict) -> TransformationApplication:
         return TransformationApplication(
-            False,
-            f"{component} is not exposed as a separate field by the Gmail parser, "
-            "so unrelated body text was left unchanged.",
+            True,
+            f"{component} was previewed on the temporary copy only; no original file or link was changed.",
+            value,
         )
 
     return apply
@@ -247,32 +290,46 @@ def _layout(
 
 # Registry order is the canonical application order, independent of request order.
 TRANSFORMATIONS: dict[str, TransformationDefinition] = {
+    # Sender metadata never enters the current subject/body classifier.
+    "sender-unverified": TransformationDefinition("sender_name", False, _label_with("Unverified Account Desk")),
     "sender-label": TransformationDefinition("sender_name", False, _sender_label),
+    "sender-friendly": TransformationDefinition("sender_name", False, _label_with("Example Customer Support")),
+    "sender-unusual-domain": TransformationDefinition("sender_address", False, _domain_with("notice@unverified-alerts.example")),
     "sender-domain": TransformationDefinition("sender_address", False, _sender_domain),
+    "sender-support-domain": TransformationDefinition("sender_address", False, _domain_with("support@service-help.example")),
+    "subject-urgent": TransformationDefinition("subject", True, _set_subject("Action requested today: account notice")),
     "subject-format": TransformationDefinition("subject", True, _subject_format),
     "subject-wording": TransformationDefinition("subject", True, _subject_wording),
+    "subject-informative": TransformationDefinition("subject", True, _set_subject("Account information for your records")),
+    "greeting-impersonal": TransformationDefinition("greeting", True, _greeting_with("Dear Customer,")),
     "greeting-generic": TransformationDefinition("greeting", True, _replace_greeting),
+    "greeting-friendly": TransformationDefinition("greeting", True, _greeting_with("Hello there,")),
+    "body-pressure": TransformationDefinition("body", True, _set_body(
+        "This example account notice asks for quick attention. Unexpected requests should always be checked through a trusted source."
+    )),
     "body-rephrase": TransformationDefinition("body", True, _body_rephrase),
+    "body-reassuring": TransformationDefinition("body", True, _set_body(
+        "This is a sample account update for your records. If it was unexpected, check directly with the service you normally use."
+    )),
+    "request-pressure": TransformationDefinition("request", True, _request_with(
+        "Please review this unexpected notice promptly, and verify it independently."
+    )),
     "request-rephrase": TransformationDefinition("request", True, _replace_request),
-    "link-placeholder": TransformationDefinition(
-        "link_text", False, _unavailable("Link display text")
-    ),
-    "attachment-label": TransformationDefinition(
-        "attachment", False, _unavailable("Attachment filename metadata")
-    ),
-    "signature-fictional": TransformationDefinition(
-        "signature", False, _unavailable("Signature")
-    ),
-    "layout-spacing": TransformationDefinition(
-        "formatting",
-        False,
-        _layout("Spacious layout was recorded for the frontend preview.", "spacious"),
-    ),
-    "layout-compact": TransformationDefinition(
-        "formatting",
-        False,
-        _layout("Compact layout was recorded for the frontend preview.", "compact"),
-    ),
+    "request-independent": TransformationDefinition("request", True, _request_with(
+        "If you have questions, contact the service using contact details you already trust."
+    )),
+    "link-pressure": TransformationDefinition("link_text", False, _preview_only("Link label", "Act now (example label only)")),
+    "link-placeholder": TransformationDefinition("link_text", False, _preview_only("Link label", "View information (example label)")),
+    "link-independent": TransformationDefinition("link_text", False, _preview_only("Link label", "Open the official service yourself")),
+    "attachment-urgent": TransformationDefinition("attachment", False, _preview_only("Attachment name", "URGENT_notice_example.zip")),
+    "attachment-label": TransformationDefinition("attachment", False, _preview_only("Attachment name", "sample-document.pdf")),
+    "attachment-descriptive": TransformationDefinition("attachment", False, _preview_only("Attachment name", "account-information-example.txt")),
+    "signature-pressure": TransformationDefinition("signature", False, _preview_only("Signature", "Example Urgent Response Desk")),
+    "signature-fictional": TransformationDefinition("signature", False, _preview_only("Signature", "Example Support Team")),
+    "signature-friendly": TransformationDefinition("signature", False, _preview_only("Signature", "Example Customer Care")),
+    "layout-compact": TransformationDefinition("formatting", False, _layout("Compact preview spacing was applied.", "compact")),
+    "layout-normal": TransformationDefinition("formatting", False, _layout("Standard preview spacing was applied.", "normal")),
+    "layout-spacing": TransformationDefinition("formatting", False, _layout("Spacious preview spacing was applied.", "spacious")),
 }
 
 

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import json
+import logging
 import re
 from time import perf_counter
 from typing import Literal
@@ -21,6 +22,8 @@ from app.services.local_ai_summary_service import (
     _WORKER,
     get_local_ai_settings,
 )
+
+_LOGGER = logging.getLogger(__name__)
 
 RewriteReason = Literal[
     "disabled", "local_model_unavailable", "invalid_ai_response",
@@ -87,12 +90,18 @@ def _validate_rewrite(raw: str, transformation_id: str, source: str) -> str:
         raise LocalAIInvalid("Rewrite contained disallowed content")
     # Do not generate new numerical dates, times, phone numbers or amounts;
     # these could introduce invented facts into a security-learning exercise.
-    if re.search(r"\d", value):
+    # Digits already present in the source are fine; new ones are not.
+    if set(re.findall(r"\d+", value)) - set(re.findall(r"\d+", source)):
         raise LocalAIInvalid("Rewrite introduced a numerical detail")
     if transformation_id != "subject-wording" and not re.search(
         r"\b(?:official|trusted|independently|independent|directly|service you normally use)\b", value, re.IGNORECASE
     ):
-        raise LocalAIInvalid("Rewrite omitted independent-verification advice")
+        # Small models often skip this; add it deterministically instead of failing.
+        suffix = " Please verify through a trusted official service."
+        if len(value) + len(suffix) <= maximum:
+            value += suffix
+        else:
+            raise LocalAIInvalid("Rewrite omitted independent-verification advice")
     return value
 
 
@@ -133,5 +142,6 @@ def generate_educational_rewrite(
         return RewriteResult(None, "local_model_unavailable")
     except LocalAIFailed:
         return RewriteResult(None, "generation_failed")
-    except (LocalAIInvalid, RuntimeError, ValueError, TypeError):
+    except (LocalAIInvalid, RuntimeError, ValueError, TypeError) as exc:
+        _LOGGER.warning("Local AI rewrite rejected: %s", exc)
         return RewriteResult(None, "invalid_ai_response")
