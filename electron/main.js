@@ -6,12 +6,12 @@ const path = require("path");
 let mainWindow;
 let pythonProcess;
 
-const backendPath = path.join(__dirname, "...", "backend");
+const backendPath = path.join(__dirname, "..", "backend");
 
 // Main function to start backend
 function startBackend() {
     const pyCmd = 
-        process.env.PYTHON_EXECUTABLE || "python3";
+        process.env.PYTHON_EXECUTABLE || (process.platform === "win32" ? "python" : "python3");
 
     pythonProcess = spawn(
         pyCmd,
@@ -61,7 +61,7 @@ async function waitForBackend() {
         }
 
         await new Promise(resolve =>
-            settimeout(resolve, 500)
+            setTimeout(resolve, 500)
         );
     }
 
@@ -72,7 +72,7 @@ async function createWindow() {
     mainWindow = new BrowserWindow({
         width: 1200,
         height: 800,
-        minwidth: 900,
+        minWidth: 900,
         minHeight: 600,
         webPreferences: {
             preload: path.join(__dirname, "preload.js"),
@@ -97,7 +97,7 @@ async function createWindow() {
     await mainWindow.loadURL("http://127.0.0.1:5173");
 }
 
-app.whenReady().them(async () => {
+app.whenReady().then(async () => {
     startBackend();
     await createWindow();
 });
