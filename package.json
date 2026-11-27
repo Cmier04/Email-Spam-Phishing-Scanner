@@ -24,5 +24,8 @@
     "concurrently": "^10.0.6",
     "electron": "^45.2.3",
     "wait-on": "^9.5.1"
+  },
+  "dependencies": {
+    "uvicorn": "^0.0.1-security"
   }
 }
