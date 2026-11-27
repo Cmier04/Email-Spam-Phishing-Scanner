@@ -1,0 +1,28 @@
+{
+  "name": "email-spam-phishing-scanner",
+  "version": "1.0.0",
+  "description": "A desktop application which classifies, notifies, and teaches users about spam and phishing emails using a machine learning model.",
+  "main": "electron/main.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev:frontend": "npm --prefix frontend run dev -- --host 127.0.0.1",
+    "desktop": "concurrently -k \"npm run dev:frontend\" \"wait-on http://127.0.0.1:5173 && electron .\""
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Cmier04/Email-Spam-Phishing-Scanner.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/Cmier04/Email-Spam-Phishing-Scanner/issues"
+  },
+  "homepage": "https://github.com/Cmier04/Email-Spam-Phishing-Scanner#readme",
+  "devDependencies": {
+    "concurrently": "^10.0.6",
+    "electron": "^45.2.3",
+    "wait-on": "^9.5.1"
+  }
+}

@@ -1,5 +1,6 @@
 
 import type { LucideIcon } from "lucide-react";
+import AnimatedNumber from "./AnimatedNumber";
 
 type MetricColor = "blue" | "green" | "red" | "violet";
 
@@ -54,7 +55,7 @@ function MetricCard({
       </div>
 
       <p className="text-[27px] font-bold tracking-tight text-[#202a44]">
-        {value}
+        <AnimatedNumber value={value} />
       </p>
 
       <p className={`mt-1 text-[11px] font-medium ${styles.note}`}>

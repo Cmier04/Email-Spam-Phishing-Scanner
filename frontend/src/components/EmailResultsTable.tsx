@@ -2,12 +2,17 @@
 import { useState } from "react";
 import { ChevronRight, Search } from "lucide-react";
 import type { Email } from "../data/mockEmails";
+import type { EmailMode } from "../data/emailPresentation";
 
 type EmailFilter = "All emails" | Email["classification"];
 
 type EmailResultsTableProps = {
   emails: Email[];
+  loading?: boolean;
+  emailMode: EmailMode;
+  hasLoaded: boolean;
   onSelect: (email: Email) => void;
+  onViewAll: () => void;
 };
 
 const filters: EmailFilter[] = [
@@ -30,12 +35,21 @@ const riskStyles: Record<Email["risk"], string> = {
   High: "bg-[#ffebe7] text-[#b8493b]",
 };
 
-function EmailResultsTable({ emails, onSelect }: EmailResultsTableProps) {
+function EmailResultsTable({
+  emails,
+  loading = false,
+  emailMode,
+  hasLoaded,
+  onSelect,
+  onViewAll,
+}: EmailResultsTableProps) {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<EmailFilter>("All emails");
 
+  const showSkeleton = loading && emails.length === 0;
+
   // Display only emails that match the selected filter and search.
-  const visibleEmails = emails.filter((email) => {
+  const matchingEmails = emails.filter((email) => {
     const matchesFilter =
       filter === "All emails" ||
       email.classification === filter;
@@ -50,8 +64,11 @@ function EmailResultsTable({ emails, onSelect }: EmailResultsTableProps) {
     return matchesFilter && matchesSearch;
   });
 
+  // Keep the dashboard a short preview; the full page handles all results.
+  const visibleEmails = matchingEmails.slice(0, 6);
+
   return (
-    <section className="overflow-hidden rounded-2xl border border-[#e1e6ee] bg-white shadow-sm">
+    <section aria-busy={showSkeleton} className="overflow-hidden rounded-2xl border border-[#e1e6ee] bg-white shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[#e7eaf0] px-5 py-5 md:px-6">
         <div>
           <h2 className="text-base font-bold text-[#202a44]">
@@ -59,15 +76,16 @@ function EmailResultsTable({ emails, onSelect }: EmailResultsTableProps) {
           </h2>
 
           <p className="mt-1 text-xs text-[#8a92a4]">
-            Messages analyzed in your lastest scans
+            {emailMode === "gmail"
+              ? "Recent Gmail messages evaluated by your local classifier"
+              : "Synthetic training emails evaluated by your local classifier"}
           </p>
         </div>
 
         <button
           type="button"
-          disabled
-          title="Full results page will be added later"
-          className="flex cursor-not-allowed items-center gap-1 text-xs font-semibold text-[#3157d5] opacity-50"
+          onClick={onViewAll}
+          className="flex items-center gap-1 text-xs font-semibold text-[#3157d5] transition hover:underline"
         >
           View all results
           <ChevronRight size={14} />
@@ -120,21 +138,40 @@ function EmailResultsTable({ emails, onSelect }: EmailResultsTableProps) {
               <th className="px-4 py-3">Subject</th>
               <th className="px-4 py-3">Classification</th>
               <th className="px-4 py-3">Confidence</th>
-              <th className="px-4 py-3">Risk</th>
+              <th className="px-4 py-3">{emailMode === "gmail" ? "Date" : "Demo risk"}</th>
               <th className="px-4 py-3">Details</th>
             </tr>
           </thead>
 
           <tbody>
-            {visibleEmails.map((email) => {
+            {showSkeleton && Array.from({ length: 4 }, (_, index) => (
+              <tr key={`loading-${index}`} aria-hidden="true" className="border-b border-[#eef0f4] last:border-0">
+                <td className="px-6 py-4">
+                  <div className="flex items-center gap-3">
+                    <span className="phishlab-skeleton h-8 w-8 shrink-0 rounded-lg" />
+                    <span className="space-y-2">
+                      <span className="phishlab-skeleton block h-3 w-24 rounded" />
+                      <span className="phishlab-skeleton block h-2 w-32 rounded" />
+                    </span>
+                  </div>
+                </td>
+                <td className="px-4 py-4"><span className="phishlab-skeleton block h-3 w-40 rounded" /></td>
+                <td className="px-4 py-4"><span className="phishlab-skeleton block h-5 w-24 rounded-full" /></td>
+                <td className="px-4 py-4"><span className="phishlab-skeleton block h-2 w-20 rounded-full" /></td>
+                <td className="px-4 py-4"><span className="phishlab-skeleton block h-5 w-12 rounded" /></td>
+                <td className="px-4 py-4"><span className="phishlab-skeleton block h-4 w-4 rounded" /></td>
+              </tr>
+            ))}
+            {!showSkeleton && visibleEmails.map((email, index) => {
               const legitimate =
                 email.classification === "Legitimate";
 
               return (
                 <tr
-                  key={email.id}
+                  key={`${email.id}-${filter}-${search.trim().toLowerCase()}`}
+                  style={{ animationDelay: `${Math.min(index, 5) * 25}ms` }}
                   onClick={() => onSelect(email)}
-                  className="border-b border-[#eef0f4] last:border-0"
+                  className="phishlab-table-row-enter group cursor-pointer border-b border-[#eef0f4] transition-colors duration-150 hover:bg-[#f2f4f7] last:border-0"
                 >
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3">
@@ -198,11 +235,17 @@ function EmailResultsTable({ emails, onSelect }: EmailResultsTableProps) {
                   </td>
 
                   <td className="px-4 py-4">
-                    <span
-                      className={`rounded-md px-2 py-1 text-[11px] font-semibold ${riskStyles[email.risk]}`}
-                    >
-                      {email.risk}
-                    </span>
+                    {emailMode === "gmail" ? (
+                      <span className="text-[11px] font-medium text-[#647086]">
+                        {email.time}
+                      </span>
+                    ) : (
+                      <span
+                        className={`rounded-md px-2 py-1 text-[11px] font-semibold ${riskStyles[email.risk]}`}
+                      >
+                        {email.risk}
+                      </span>
+                    )}
                   </td>
 
                   <td className="px-4 py-4">
@@ -213,32 +256,41 @@ function EmailResultsTable({ emails, onSelect }: EmailResultsTableProps) {
                         event.stopPropagation();
                         onSelect(email);
                       }}
-                      className="rounded-md p-1 text-[#abb1be] hover:bg-[#eef2ff] hover:text-[#3157d5] focus-visible:outline-2 focus-visible:outline-[#3157d5]"
+                      className="rounded-md p-1 text-[#abb1be] transition-all duration-150 group-hover:translate-x-0.5 group-hover:text-[#3157d5] hover:bg-[#e5e9f1] focus-visible:outline-2 focus-visible:outline-[#3157d5]"
                     >
                       <ChevronRight size={17} />
                     </button>
                   </td>
-                          
                 </tr>
               );
             })}
           </tbody>
         </table>
 
-        {visibleEmails.length === 0 && (
+        {!showSkeleton && visibleEmails.length === 0 && (
           <div className="py-12 text-center">
             <p className="text-sm font-semibold text-[#4c566c]">
-              No matching emails
+              {emailMode === "gmail" && hasLoaded && emails.length === 0
+                ? "No Gmail messages found"
+                : emailMode === "gmail" && !hasLoaded
+                  ? "No Gmail scan yet"
+                  : "No matching emails"}
             </p>
             <p className="mt-1 text-xs text-[#9198a8]">
-              Try changing your search or filter.
+              {emailMode === "gmail" && !hasLoaded
+                ? "Select Scan emails to retrieve recent inbox messages."
+                : emailMode === "gmail" && emails.length === 0
+                  ? "The recent inbox query returned no messages."
+                  : "Try changing your search or filter."}
             </p>
           </div>
         )}
       </div>
 
       <div className="border-t border-[#e9ecf1] px-6 py-4 text-[11px] text-[#8a92a4]">
-        Showing {visibleEmails.length} of {emails.length} mock emails
+        {showSkeleton
+          ? "Loading emails..."
+          : `Showing ${visibleEmails.length} of ${matchingEmails.length} matching emails (${emails.length} total)`}
       </div>
     </section>
   );

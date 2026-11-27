@@ -1,8 +1,19 @@
 .DS_Store
-backend/credentials.json
-backend/token.json
-backend/.env
 backend/venv/
 __pycache__/
 *.pyc
-AGENTS.md
+*.py[cod]
+
+# Gmail credentials
+backend/.env
+backend/credentials.json
+backend/token.json*
+
+# Node dependencies (large files)
+node_modules/
+**/node_modules/
+frontend/node_modules/
+dist/
+build/
+release/
+

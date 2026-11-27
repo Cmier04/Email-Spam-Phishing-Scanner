@@ -1,0 +1,425 @@
+
+/* Slide each score bar from the last FastAPI result to the new one. */
+.phishlab-score-fill {
+  transition: width 550ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Indeterminate activity while FastAPI is processing a what-if request.
+   This is not a simulated probability or progress percentage. */
+@keyframes phishlab-classifier-loading {
+  from { transform: translateX(-110%); }
+  to { transform: translateX(310%); }
+}
+
+.phishlab-classifier-loading {
+  animation: phishlab-classifier-loading 1400ms ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .phishlab-score-fill {
+    transition: none;
+  }
+
+  .phishlab-classifier-loading {
+    animation: none;
+  }
+}
+
+/* A brief confirmation pulse after FastAPI accepts an email-field edit. */
+@keyframes phishlab-field-updated {
+  0% { box-shadow: 0 0 0 0 rgba(49, 87, 213, 0.23); border-color: #8097df; }
+  45% { box-shadow: 0 0 0 5px rgba(49, 87, 213, 0.09); border-color: #8097df; }
+  100% { box-shadow: 0 0 0 0 rgba(49, 87, 213, 0); }
+}
+
+.lab-field-flash {
+  animation: phishlab-field-updated 850ms ease-out;
+}
+
+@keyframes phishlab-modified-appear {
+  from { opacity: 0; transform: translateY(3px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.lab-modified-badge {
+  animation: phishlab-modified-appear 180ms ease-out both;
+}
+
+/* Collapsing a grid track lets remaining Undo cards shift up naturally. */
+.lab-change-item {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows 230ms ease, opacity 230ms ease, transform 230ms ease;
+}
+
+.lab-change-item-inner {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.lab-change-item-exit {
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transform: translateY(-5px) scale(0.985);
+  pointer-events: none;
+}
+
+/* Existing summary layout is unchanged; only the entrance/exit animates. */
+@keyframes phishlab-summary-backdrop-enter {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes phishlab-summary-backdrop-leave {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@keyframes phishlab-summary-dialog-enter {
+  from { opacity: 0; transform: translateY(12px) scale(0.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes phishlab-summary-dialog-leave {
+  from { opacity: 1; transform: translateY(0) scale(1); }
+  to { opacity: 0; transform: translateY(8px) scale(0.98); }
+}
+
+.lab-summary-backdrop {
+  animation: phishlab-summary-backdrop-enter 220ms ease-out both;
+}
+
+.lab-summary-backdrop-exit {
+  animation: phishlab-summary-backdrop-leave 180ms ease-in both;
+}
+
+.lab-summary-dialog {
+  animation: phishlab-summary-dialog-enter 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.lab-summary-dialog-exit {
+  animation: phishlab-summary-dialog-leave 180ms ease-in both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lab-field-flash,
+  .lab-modified-badge,
+  .lab-summary-backdrop,
+  .lab-summary-backdrop-exit,
+  .lab-summary-dialog,
+  .lab-summary-dialog-exit {
+    animation: none;
+  }
+
+  .lab-change-item {
+    transition: none;
+  }
+}
+
+
+/* Dashboard and scan-results polish. No sidebar/page-navigation animations. */
+
+/* Filtered or reordered table rows enter gently without changing table sizing. */
+@keyframes phishlab-table-row-enter {
+  from { opacity: 0; transform: translateY(5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.phishlab-table-row-enter {
+  animation: phishlab-table-row-enter 180ms ease-out both;
+}
+
+/* Skeletons occupy their final components' space during the first FastAPI fetch. */
+@keyframes phishlab-skeleton-shimmer {
+  from { background-position: 100% 0; }
+  to { background-position: -100% 0; }
+}
+
+.phishlab-skeleton {
+  background: linear-gradient(100deg, #edf0f5 28%, #f7f8fb 48%, #edf0f5 68%);
+  background-size: 220% 100%;
+  animation: phishlab-skeleton-shimmer 1500ms linear infinite;
+}
+
+@keyframes phishlab-toast-enter {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.phishlab-toast {
+  animation: phishlab-toast-enter 220ms ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .phishlab-table-row-enter,
+  .phishlab-skeleton,
+  .phishlab-toast {
+    animation: none;
+  }
+}
+
+
+/* Section-by-section page entrances. The sidebar and page layout are unchanged.
+   Animating the children instead of <main> keeps fixed overlays attached to the viewport */
+@keyframes phishlab-component-reveal {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* The backwards fill mode hides a section only until its scheduled entrance;
+   it does not leave transforms on cards or layout containers afterward. */
+.phishlab-dashboard-stagger > :first-child,
+.phishlab-dashboard-stagger > :last-child,
+.phishlab-dashboard-metrics > *,
+.phishlab-settings-stagger > :first-child,
+.phishlab-settings-stagger > :last-child,
+.phishlab-settings-sections > *,
+.phishlab-settings-sections > section > div:nth-child(2) > *,
+.phishlab-help-stagger > section,
+.phishlab-help-cards > *,
+.phishlab-help-questions > *,
+.phishlab-scan-stagger > :first-child,
+.phishlab-scan-stagger > .phishlab-scan-table,
+.phishlab-scan-metrics > *,
+.phishlab-scan-table > *,
+.phishlab-email-stagger > :first-child,
+.phishlab-email-stagger > :nth-child(2) > section,
+.phishlab-email-stagger > :nth-child(2) > section > div,
+.phishlab-email-stagger > :nth-child(2) > section > div:nth-child(2) > *,
+.phishlab-email-stagger > :nth-child(2) > div > *,
+.phishlab-email-stagger > :nth-child(2) > div > section:nth-child(2) > div > *,
+.phishlab-lab-enter,
+.phishlab-lab-investigate > *,
+.phishlab-lab-review > div {
+  animation-name: phishlab-component-reveal;
+  animation-duration: 215ms;
+  animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+  animation-fill-mode: backwards;
+}
+
+
+/* Dashboard: welcome -> four separate metrics -> recent email results. */
+.phishlab-dashboard-stagger > :first-child { animation-delay: 35ms; }
+.phishlab-dashboard-metrics > :nth-child(1) { animation-delay: 85ms; }
+.phishlab-dashboard-metrics > :nth-child(2) { animation-delay: 120ms; }
+.phishlab-dashboard-metrics > :nth-child(3) { animation-delay: 155ms; }
+.phishlab-dashboard-metrics > :nth-child(4) { animation-delay: 190ms; }
+.phishlab-dashboard-stagger > :last-child { animation-delay: 240ms; }
+
+/* Scan Results: heading -> each metric -> table heading -> filters -> rows. */
+.phishlab-scan-stagger > :first-child { animation-delay: 35ms; }
+.phishlab-scan-metrics > :nth-child(1) { animation-delay: 85ms; }
+.phishlab-scan-metrics > :nth-child(2) { animation-delay: 120ms; }
+.phishlab-scan-metrics > :nth-child(3) { animation-delay: 155ms; }
+.phishlab-scan-stagger > .phishlab-scan-table { animation-delay: 185ms; }
+.phishlab-scan-table > :nth-child(1) { animation-delay: 195ms; }
+.phishlab-scan-table > :nth-child(2) { animation-delay: 225ms; }
+.phishlab-scan-table > :nth-child(3) { animation-delay: 255ms; }
+.phishlab-scan-table > :nth-child(4) { animation-delay: 290ms; }
+
+/* Settings: title -> connection -> scanning -> notifications -> privacy -> reset. */
+.phishlab-settings-stagger > :first-child { animation-delay: 35ms; }
+.phishlab-settings-sections > :nth-child(1) { animation-delay: 85ms; }
+.phishlab-settings-sections > :nth-child(2) { animation-delay: 125ms; }
+.phishlab-settings-sections > :nth-child(3) { animation-delay: 165ms; }
+.phishlab-settings-sections > :nth-child(4) { animation-delay: 205ms; }
+/* Within each settings card, controls arrive from top to bottom. */
+.phishlab-settings-sections > section:nth-child(1) > div:nth-child(2) > :nth-child(1) { animation-delay: 120ms; }
+.phishlab-settings-sections > section:nth-child(2) > div:nth-child(2) > :nth-child(1) { animation-delay: 160ms; }
+.phishlab-settings-sections > section:nth-child(2) > div:nth-child(2) > :nth-child(2) { animation-delay: 190ms; }
+.phishlab-settings-sections > section:nth-child(2) > div:nth-child(2) > :nth-child(3) { animation-delay: 220ms; }
+.phishlab-settings-sections > section:nth-child(3) > div:nth-child(2) > :nth-child(1) { animation-delay: 205ms; }
+.phishlab-settings-sections > section:nth-child(3) > div:nth-child(2) > :nth-child(2) { animation-delay: 235ms; }
+.phishlab-settings-sections > section:nth-child(4) > div:nth-child(2) > :nth-child(1) { animation-delay: 245ms; }
+.phishlab-settings-sections > section:nth-child(4) > div:nth-child(2) > :nth-child(2) { animation-delay: 275ms; }
+.phishlab-settings-stagger > :last-child { animation-delay: 300ms; }
+
+/* Help Center: search hero -> guide cards -> FAQ -> troubleshooting. */
+.phishlab-help-stagger > :nth-child(1) { animation-delay: 35ms; }
+.phishlab-help-stagger > :nth-child(2) { animation-delay: 90ms; }
+.phishlab-help-stagger > :nth-child(3) { animation-delay: 215ms; }
+.phishlab-help-stagger > :nth-child(4) { animation-delay: 270ms; }
+.phishlab-help-cards > :nth-child(1) { animation-delay: 110ms; }
+.phishlab-help-cards > :nth-child(2) { animation-delay: 140ms; }
+.phishlab-help-cards > :nth-child(3) { animation-delay: 170ms; }
+.phishlab-help-cards > :nth-child(4) { animation-delay: 200ms; }
+/* Only the first few FAQ entries stagger; avoid a long delay for the rest. */
+.phishlab-help-questions > :nth-child(1) { animation-delay: 225ms; }
+.phishlab-help-questions > :nth-child(2) { animation-delay: 240ms; }
+.phishlab-help-questions > :nth-child(3) { animation-delay: 255ms; }
+.phishlab-help-questions > :nth-child(4) { animation-delay: 270ms; }
+.phishlab-help-questions > :nth-child(5) { animation-delay: 285ms; }
+.phishlab-help-questions > :nth-child(6) { animation-delay: 300ms; }
+.phishlab-help-questions > :nth-child(n+7) { animation-delay: 310ms; }
+
+/* Email Detail: subject -> sender -> message -> assessment -> guidance -> lab link. */
+.phishlab-email-stagger > :first-child { animation-delay: 35ms; }
+.phishlab-email-stagger > :nth-child(2) > section { animation-delay: 80ms; }
+.phishlab-email-stagger > :nth-child(2) > section > :nth-child(1) { animation-delay: 115ms; }
+.phishlab-email-stagger > :nth-child(2) > section > :nth-child(2) { animation-delay: 155ms; }
+.phishlab-email-stagger > :nth-child(2) > div > :nth-child(1) { animation-delay: 105ms; }
+.phishlab-email-stagger > :nth-child(2) > div > :nth-child(2) { animation-delay: 155ms; }
+.phishlab-email-stagger > :nth-child(2) > div > :nth-child(3) { animation-delay: 205ms; }
+/* Within the email message and guidance cards, reveal text in reading order. */
+.phishlab-email-stagger > :nth-child(2) > section > div:nth-child(2) > :nth-child(1) { animation-delay: 180ms; }
+.phishlab-email-stagger > :nth-child(2) > section > div:nth-child(2) > :nth-child(2) { animation-delay: 205ms; }
+.phishlab-email-stagger > :nth-child(2) > section > div:nth-child(2) > :nth-child(3) { animation-delay: 230ms; }
+.phishlab-email-stagger > :nth-child(2) > section > div:nth-child(2) > :nth-child(4) { animation-delay: 255ms; }
+.phishlab-email-stagger > :nth-child(2) > section > div:nth-child(2) > :nth-child(5) { animation-delay: 280ms; }
+.phishlab-email-stagger > :nth-child(2) > section > div:nth-child(2) > :nth-child(6) { animation-delay: 305ms; }
+.phishlab-email-stagger > :nth-child(2) > div > :nth-child(4) { animation-delay: 255ms; }
+.phishlab-email-stagger > :nth-child(2) > div > section:nth-child(2) > div > :nth-child(1) { animation-delay: 195ms; }
+.phishlab-email-stagger > :nth-child(2) > div > section:nth-child(2) > div > :nth-child(2) { animation-delay: 220ms; }
+.phishlab-email-stagger > :nth-child(2) > div > section:nth-child(2) > div > :nth-child(3) { animation-delay: 245ms; }
+
+/* Learning Lab: preserve the existing staged markup and its re-open behavior.
+   Some stage, header, and field delays are set inline in LearningLab.tsx. */
+.phishlab-lab-investigate > :nth-child(1) { animation-delay: 250ms; }
+.phishlab-lab-investigate > :nth-child(2) { animation-delay: 300ms; }
+.phishlab-lab-investigate > :nth-child(3) { animation-delay: 350ms; }
+.phishlab-lab-review > div:nth-of-type(1) { animation-delay: 365ms; }
+.phishlab-lab-review > div:nth-of-type(2) { animation-delay: 410ms; }
+.phishlab-lab-review > div:nth-of-type(3) { animation-delay: 455ms; }
+
+/* All entrance effects are removed for people who prefer reduced motion. */
+@media (prefers-reduced-motion: reduce) {
+    .phishlab-dashboard-stagger > :first-child,
+  .phishlab-dashboard-stagger > :last-child,
+  .phishlab-dashboard-metrics > *,
+  .phishlab-settings-stagger > :first-child,
+  .phishlab-settings-stagger > :last-child,
+  .phishlab-settings-sections > *,
+  .phishlab-settings-sections > section > div:nth-child(2) > *,
+  .phishlab-help-stagger > section,
+  .phishlab-help-cards > *,
+  .phishlab-help-questions > *,
+  .phishlab-scan-stagger > :first-child,
+  .phishlab-scan-stagger > .phishlab-scan-table,
+  .phishlab-scan-metrics > *,
+  .phishlab-scan-table > *,
+  .phishlab-email-stagger > :first-child,
+  .phishlab-email-stagger > :nth-child(2) > section,
+  .phishlab-email-stagger > :nth-child(2) > section > div,
+  .phishlab-email-stagger > :nth-child(2) > section > div:nth-child(2) > *,
+  .phishlab-email-stagger > :nth-child(2) > div > *,
+  .phishlab-email-stagger > :nth-child(2) > div > section:nth-child(2) > div > *,
+  .phishlab-lab-enter,
+  .phishlab-lab-investigate > *,
+  .phishlab-lab-review > div {
+    animation: none;
+  }
+}
+
+
+/* Header changes use a true crossfade of the previous and next header.
+   Unlike section entrances, neither header slides or changes its layout. */
+.phishlab-topbar-enter {
+  view-transition-name: phishlab-header;
+}
+
+@keyframes phishlab-header-crossfade-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@keyframes phishlab-header-crossfade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  /* Show the new page immediately so its staggered sections can keep animating. */
+  ::view-transition-old(root) {
+    display: none;
+  }
+
+  ::view-transition-new(root) {
+    animation: none;
+  }
+
+  /* Do not interpolate the header's rectangle or move it between pages. */
+  ::view-transition-group(phishlab-header) {
+    animation-duration: 0s;
+  }
+
+  ::view-transition-old(phishlab-header) {
+    animation: phishlab-header-crossfade-out 190ms ease-in-out both;
+  }
+
+  ::view-transition-new(phishlab-header) {
+    animation: phishlab-header-crossfade-in 190ms ease-in-out both;
+  }
+}
+
+/* Cards slide between Compact, Normal and Spacious.
+   Gap and padding animate without changing field content or ordering. */
+.phishlab-formatting-fields {
+  transition:
+    gap 360ms cubic-bezier(0.22, 1, 0.36, 1),
+    padding 360ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Crossfade for changing email fields and Learning Lab text.
+   The previous content overlays the new content briefly, without sliding. */
+@keyframes phishlab-crossfade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes phishlab-crossfade-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+.phishlab-crossfade {
+  position: relative;
+}
+
+.phishlab-crossfade-outgoing {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  z-index: 1;
+  pointer-events: none;
+  animation: phishlab-crossfade-out 190ms ease-in-out both;
+}
+
+.phishlab-crossfade-incoming {
+  animation: phishlab-crossfade-in 190ms ease-in-out both;
+}
+
+.phishlab-whatif-applied {
+  animation: phishlab-crossfade-in 190ms ease-out both;
+}
+
+/* The What-If card grows and shrinks to fit options and classifier results. */
+.phishlab-whatif-resize {
+  overflow: hidden;
+  transition: height 320ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+
+
+/* First classifier scores appear in order instead of popping into place. */
+.phishlab-score-cards-enter > * {
+  animation: phishlab-crossfade-in 240ms ease-out both;
+}
+.phishlab-score-cards-enter > :nth-child(2) { animation-delay: 55ms; }
+.phishlab-score-difference-enter {
+  animation: phishlab-crossfade-in 240ms ease-out 95ms both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .phishlab-crossfade-outgoing,
+  .phishlab-crossfade-incoming,
+  .phishlab-whatif-applied,
+  .phishlab-score-cards-enter > *,
+  .phishlab-score-difference-enter {
+    animation: none;
+  }
+  .phishlab-whatif-resize { transition: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .phishlab-formatting-fields { transition: none; }
+}

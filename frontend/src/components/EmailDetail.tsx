@@ -1,6 +1,7 @@
 
 import { useState } from "react";
 import LearningLab from "./LearningLab";
+import { withHeaderCrossfade } from "../data/headerCrossfade";
 
 import {
   ArrowLeft,
@@ -34,25 +35,26 @@ function EmailDetail({
   onOpenMenu,
 }: EmailDetailProps) {
   const [labActive, setLabActive] = useState(false);
-  const isThreat = email.classification === "Potential threat";
+  const isThreat = 
+    email.classification === "Potential threat";
 
-  // Keep both views mounted so local What-If changes survive tab switches.
+  // Keep both views mounted so What-If changes survive tab switches.
   return (
     <>
       <div className={labActive ? "hidden" : ""}>
       {/* Header and back navigation */}
-      <header className="flex min-h-[72px] flex-wrap items-center justify-between gap-3 border-b border-[#e4e8ef] bg-white px-5 py-3 md:px-8">
+      <header className={`${labActive ? "" : "phishlab-topbar-enter"} flex min-h-[72px] flex-wrap items-center justify-between gap-3 border-b border-[#e4e8ef] bg-white px-5 py-3 md:px-8`}>
         <div className="flex items-center gap-3">
           <button type="button" onClick={onOpenMenu} aria-label="Open navigation menu" className="text-[#596579] lg:hidden"><Menu size={20} /></button>
           <button type="button" onClick={onBack} className="flex items-center gap-2 text-sm font-semibold text-[#596579] hover:text-[#3157d5]"><ArrowLeft size={17} /> Back to dashboard</button>
         </div>
         <div className="ml-auto flex shrink-0 rounded-lg bg-[#f0f2f6] p-1">
           <span className="rounded-md bg-white px-3 py-1.5 text-[11px] font-semibold text-[#28334f] shadow-sm">Original email</span>
-          <button type="button" onClick={() => setLabActive(true)} className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[11px] font-semibold text-[#788197] hover:text-[#3157d5]"><FlaskConical size={14} /> Learning Lab</button>
+          <button type="button" onClick={() => withHeaderCrossfade(() => setLabActive(true))} className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[11px] font-semibold text-[#788197] hover:text-[#3157d5]"><FlaskConical size={14} /> Learning Lab</button>
         </div>
       </header>
 
-      <div className="mx-auto max-w-[1120px] px-5 py-8 md:px-8">
+      <div className={`${labActive ? "" : "phishlab-email-stagger"} mx-auto max-w-[1120px] px-5 py-8 md:px-8`}>
         {/* Email title and classification */}
         <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
           <div>
@@ -97,7 +99,7 @@ function EmailDetail({
                   </p>
 
                   <p className="mt-1 text-xs text-[#9ba2b1]">
-                    Example email · {email.time}
+                    {email.source === "gmail" ? "Gmail message" : "Training example"} · {email.time}
                   </p>
                 </div>
               </div>
@@ -105,11 +107,13 @@ function EmailDetail({
 
             {/* Displayed message is read-only. */}
             <div className="p-6 md:p-8">
-              <p className="mb-5 text-[15px] leading-7 text-[#39445d]">
-                {email.greeting ?? "Hello,"}
-              </p>
+              {email.greeting && (
+                <p className="mb-5 text-[15px] leading-7 text-[#39445d]">
+                  {email.greeting}
+                </p>
+              )}
 
-              <p className="mb-5 whitespace-pre-line text-[15px] leading-7 text-[#39445d]">
+              <p className="mb-5 whitespace-pre-wrap break-words text-[15px] leading-7 text-[#39445d]">
                 {email.body ?? email.preview}
               </p>
 
@@ -267,7 +271,7 @@ function EmailDetail({
 
               <button
                 type="button"
-                onClick={() => setLabActive(true)}
+                onClick={() => withHeaderCrossfade(() => setLabActive(true))}
                 className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#3157d5] py-2.5 text-xs font-semibold text-white transition hover:bg-[#294ac0]"
               >
                 <FlaskConical size={15} />
@@ -291,7 +295,8 @@ function EmailDetail({
       <div className={labActive ? "" : "hidden"}>
         <LearningLab
           email={email}
-          onBack={() => setLabActive(false)}
+          active={labActive}
+          onBack={() => withHeaderCrossfade(() => setLabActive(false))}
           onOpenMenu={onOpenMenu}
         />
       </div>
